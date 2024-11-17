@@ -4,6 +4,16 @@ library(shiny)
 library(shinydashboard)
 library(shinyjs)  # 加载 shinyjs
 
+# 引入模块
+source("modules/data_upload.R")
+source("modules/data_exploration.R")
+source("modules/model_selection.R")
+source("modules/objective_function.R")
+source("modules/covariant_screening.R")
+source("modules/parameter_evaluation.R")
+source("modules/model_diagnosis.R")
+source("modules/dose_recommendation.R")
+
 ui <- fluidPage(
   # 登录界面
   uiOutput("login_page"),
@@ -20,16 +30,17 @@ ui <- fluidPage(
       )
     ),
     dashboardSidebar(
-      sidebarMenu(
+    sidebarMenu(
+        id = "tabs",
         menuItem("主界面", tabName = "main_page", icon = icon("dashboard")),
         menuItem("群体药动学建模", icon = icon("flask"),
-                 menuSubItem("数据读入", tabName = "data_input"),
-                 menuSubItem("数据探索", tabName = "data_exploration"),
-                 menuSubItem("基础模型选择", tabName = "base_model_selection"),
-                 menuSubItem("目标函数计算", tabName = "objective_function"),
-                 menuSubItem("协变量筛选", tabName = "covariate_selection"),
-                 menuSubItem("参数评估", tabName = "parameter_evaluation"),
-                 menuSubItem("模型诊断", tabName = "model_diagnostics")
+            menuSubItem("数据读入", tabName = "data_input"),
+            menuSubItem("数据探索", tabName = "data_exploration"),
+            menuSubItem("基础模型选择", tabName = "base_model_selection"),
+            menuSubItem("目标函数计算", tabName = "objective_function"),
+            menuSubItem("协变量筛选", tabName = "covariant_screening"),
+            menuSubItem("参数评估", tabName = "parameter_evaluation"),
+            menuSubItem("模型诊断", tabName = "model_diagnosis")
         ),
         menuItem("剂量推荐", tabName = "dose_recommendation", icon = icon("pills"))
       )
@@ -47,42 +58,44 @@ ui <- fluidPage(
         
         # 数据读入页面
         tabItem(tabName = "data_input",
-                fluidRow(
-                  box(title = "上传数据文件", status = "primary", solidHeader = TRUE,
-                      fileInput("data_file", "选择 CSV 文件",
-                                multiple = FALSE,
-                                accept = c("text/csv",
-                                           "text/comma-separated-values,text/plain",
-                                           ".csv")),
-                      textInput("col_id", "ID 列名", value = "ID"),
-                      textInput("col_time", "TIME 列名", value = "TIME"),
-                      textInput("col_dv", "DV 列名", value = "DV"),
-                      textInput("col_amt", "AMT 列名", value = "AMT"),
-                      actionButton("upload_data_button", "上传数据")
-                  ),
-                  box(title = "上传状态", status = "info", solidHeader = TRUE,
-                      verbatimTextOutput("upload_status")
-                  )
-                )
+                dataUploadUI("data_upload")
         ),
         
         # 数据探索页面
         tabItem(tabName = "data_exploration",
-                fluidRow(
-                  box(title = "选择数据集", status = "primary", solidHeader = TRUE,
-                      selectInput("selected_data", "选择数据集",
-                                  choices = NULL)  # 服务器端动态更新选项
-                  ),
-                  box(title = "数据表格", status = "info", solidHeader = TRUE,
-                      DT::dataTableOutput("data_table")
-                  )
-                ),
-                fluidRow(
-                  box(title = "药动学曲线", status = "warning", solidHeader = TRUE,
-                      plotOutput("pk_plot", height = "400px")
-                  )
-                )
+                dataExplorationUI("data_exploration")
+        ),
+
+        # 模型选择页面
+        tabItem(tabName = "base_model_selection",
+                modelSelectionUI("model_selection")
+        ),
+
+        # 目标函数计算页面
+        tabItem(tabName = "objective_function",
+                objectiveFunctionUI("objective_function")
+        ),
+
+        # 协变量筛选页面
+        tabItem(tabName = "covariant_screening",
+                covariantScreeningUI("covariant_screening")
+        ),
+
+        # 参数评估页面
+        tabItem(tabName = "parameter_evaluation",
+                parameterEvaluationUI("parameter_evaluation")
+        ),
+
+        # 模型诊断页面
+        tabItem(tabName = "model_diagnosis",
+                modelDiagnosisUI("model_diagnosis")
+        ),
+
+                # 剂量推荐页面
+        tabItem(tabName = "dose_recommendation",
+                doseRecommendationUI("dose_recommendation")
         )
+
         # 其他页面的内容，根据需要添加
       )
     )
