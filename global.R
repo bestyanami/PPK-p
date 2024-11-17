@@ -14,16 +14,6 @@ drawing_folder <- "PKDrawingFolder"
 pl_model_folder <- "PLModelFolder"
 pl_data_folder <- "PLData"
 
-# 加载必要的 R 包（如果未在 index.R 中加载）
-library(shiny)
-library(shinydashboard)
-library(nlmixr2)
-library(ggplot2)
-library(DT)
-library(readr)
-library(markdown)
-# 根据需要加载更多的包
-
 # 定义常用的全局函数
 
 # 获取模型列表函数
@@ -68,5 +58,3 @@ Extractparm <- function(model_file) {
   }
 }
 
-# 其他全局变量和函数
-# ...

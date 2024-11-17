@@ -1,19 +1,5 @@
 # ui.R
 
-library(shiny)
-library(shinydashboard)
-library(shinyjs)  # 加载 shinyjs
-
-# 引入模块
-source("modules/data_upload.R")
-source("modules/data_exploration.R")
-source("modules/model_selection.R")
-source("modules/objective_function.R")
-source("modules/covariant_screening.R")
-source("modules/parameter_evaluation.R")
-source("modules/model_diagnosis.R")
-source("modules/dose_recommendation.R")
-
 ui <- fluidPage(
   # 登录界面
   uiOutput("login_page"),

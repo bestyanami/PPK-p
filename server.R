@@ -1,24 +1,5 @@
 # server.R
 
-library(shiny)
-library(shinydashboard)
-library(nlmixr2)    # 用于群体药动学建模
-library(ggplot2)    # 绘图
-library(DT)         # 数据表格展示
-library(readr)      # 数据读取
-library(markdown)   # 显示 Markdown 文件
-library(shinyjs)  # 加载 shinyjs
-
-# 引入模块
-source("modules/data_upload.R")
-source("modules/data_exploration.R")
-source("modules/model_selection.R")
-source("modules/objective_function.R")
-source("modules/covariant_screening.r")
-source("modules/parameter_evaluation.r")
-source("modules/model_diagnosis.r")
-source("modules/dose_recommendation.R")
-
 server <- function(input, output, session) {
   
   #### 用户登录验证 ####

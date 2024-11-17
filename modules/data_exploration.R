@@ -1,5 +1,9 @@
 # modules/data_exploration.R
 
+library(shiny)
+library(DT)
+library(ggplot2)
+
 dataExplorationUI <- function(id) {
   ns <- NS(id)
   tagList(
@@ -8,13 +12,30 @@ dataExplorationUI <- function(id) {
           selectInput(ns("selected_data"), "选择数据集",
                       choices = NULL)  # 服务器端动态更新选项
       ),
+      box(title = "选择数据类型", status = "primary", solidHeader = TRUE,
+          selectInput(ns("data_type"), "选择数据类型",
+                      choices = c("药动学曲线", "NCA曲线"))
+      )
+    ),
+    fluidRow(
       box(title = "数据表格", status = "info", solidHeader = TRUE,
           DT::dataTableOutput(ns("data_table"))
       )
     ),
     fluidRow(
-      box(title = "药动学曲线", status = "warning", solidHeader = TRUE,
+      box(title = "数据摘要", status = "success", solidHeader = TRUE,
+          verbatimTextOutput(ns("data_summary"))
+      ),
+      box(title = "曲线图", status = "warning", solidHeader = TRUE,
           plotOutput(ns("pk_plot"), height = "400px")
+      )
+    ),
+    fluidRow(
+      box(title = "数据过滤", status = "danger", solidHeader = TRUE,
+          selectInput(ns("filter_evid"), "选择EVID",
+                      choices = c("全部", unique(data()$EVID))),
+          selectInput(ns("filter_cmt"), "选择CMT",
+                      choices = c("全部", unique(data()$CMT)))
       )
     )
   )
@@ -39,58 +60,61 @@ dataExplorationServer <- function(id) {
         updateSelectInput(session, "selected_data", choices = data_files())
       })
       
-      # 读取选定的数据集
-      selected_data <- reactive({
+      # 加载数据
+      data <- reactive({
         req(input$selected_data)
-        data_path <- file.path("PKdata", input$selected_data)
-        if (file.exists(data_path)) {
-          data <- readRDS(data_path)
-          return(data)
-        } else {
-          showModal(modalDialog(
-            title = "错误",
-            "选定的数据集不存在。",
-            easyClose = TRUE,
-            footer = NULL
-          ))
-          return(NULL)
-        }
+        readRDS(file.path("PKdata", input$selected_data))
       })
       
-      # 渲染数据表格
+      # 更新过滤选项
+      observe({
+        df <- data()
+        updateSelectInput(session, "filter_evid",
+                          choices = c("全部", unique(df$EVID)))
+        updateSelectInput(session, "filter_cmt",
+                          choices = c("全部", unique(df$CMT)))
+      })
+      
+      # 数据表格输出
       output$data_table <- DT::renderDataTable({
-        data <- selected_data()
-        req(data)
-        datatable(data, options = list(pageLength = 10, scrollX = TRUE))
+        df <- data()
+        if (input$filter_evid != "全部") {
+          df <- df[df$EVID == as.numeric(input$filter_evid), ]
+        }
+        if (input$filter_cmt != "全部") {
+          df <- df[df$CMT == as.numeric(input$filter_cmt), ]
+        }
+        DT::datatable(df, options = list(pageLength = 10))
       })
       
-      # 生成药动学曲线图
+      # 数据摘要
+      output$data_summary <- renderPrint({
+        summary(data())
+      })
+      
+      # 曲线绘制
       output$pk_plot <- renderPlot({
-        data <- selected_data()
-        req(data)
-        
-        # 检查必要的列是否存在
-        required_cols <- c("ID", "TIME", "DV")
-        missing_cols <- setdiff(required_cols, colnames(data))
-        if (length(missing_cols) > 0) {
-          showModal(modalDialog(
-            title = "错误",
-            paste("数据集中缺少以下必要列：", paste(missing_cols, collapse = ", ")),
-            easyClose = TRUE,
-            footer = NULL
-          ))
-          return(NULL)
+        df <- data()
+        if (input$filter_evid != "全部") {
+          df <- df[df$EVID == as.numeric(input$filter_evid), ]
+        }
+        if (input$filter_cmt != "全部") {
+          df <- df[df$CMT == as.numeric(input$filter_cmt), ]
         }
         
-        ggplot(data, aes(x = TIME, y = DV, color = as.factor(ID))) +
-          geom_line() +
-          geom_point() +
-          theme_minimal() +
-          labs(title = "药动学曲线",
-               x = "时间 (TIME)",
-               y = "药物浓度 (DV)",
-               color = "患者ID") +
-          theme(plot.title = element_text(hjust = 0.5))
+        if (input$data_type == "药动学曲线") {
+          ggplot(df, aes(x = TIME, y = DV, color = factor(ID))) +
+            geom_line() +
+            geom_point() +
+            labs(title = "药动学曲线", x = "时间 (小时)", y = "浓度 (DV)", color = "患者ID") +
+            theme_minimal()
+        } else if (input$data_type == "NCA曲线") {
+          # 示例NCA曲线绘制，需根据实际NCA数据结构调整
+          ggplot(df, aes(x = TIME, y = DV, color = factor(ID))) +
+            geom_step() +
+            labs(title = "NCA曲线", x = "时间 (小时)", y = "浓度 (DV)", color = "患者ID") +
+            theme_minimal()
+        }
       })
     }
   )

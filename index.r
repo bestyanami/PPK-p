@@ -3,9 +3,16 @@ library(shiny)
 library(shinydashboard)
 library(ggplot2)
 library(nlmixr2)
-# 根据需要加载更多包
+library(shinyjs)
+library(DT)
+library(readr)
+library(markdown)
 
-# 加载全局变量和函数（如果有）
+# 动态加载模块
+modules_files <- list.files("modules", pattern = "\\.[Rr]$", full.names = TRUE)
+lapply(modules_files, source)
+
+# 加载全局变量和函数
 source("global.R")
 
 # 加载 UI 和服务器逻辑
