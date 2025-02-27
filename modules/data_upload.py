@@ -6,8 +6,8 @@ from werkzeug.utils import secure_filename
 import os
 import pandas as pd
 import shutil
-#from rpy2 import robjects
-#from rpy2.robjects import pandas2ri
+from rpy2 import robjects
+from rpy2.robjects import pandas2ri
 import re
 
 data_upload_bp = Blueprint('data_upload', __name__, url_prefix='/data_upload')
@@ -67,13 +67,16 @@ def upload_data():
             pk_csv_path = os.path.join('PKdata', filename)
             df.to_csv(pk_csv_path, index=False)
             
-            # 如果需要RDS格式（当rpy2可用时）
-            # RDS部分被注释掉了
-            #pandas2ri.activate()
-            #r_df = pandas2ri.py2rpy(df)
-            #output_filename = os.path.splitext(filename)[0] + ".rds"
-            #output_path = os.path.join('PKdata', output_filename)
-            #robjects.r(f'saveRDS(r_df, file="{output_path}")')
+            from rpy2.robjects.conversion import localconverter
+            
+            with localconverter(robjects.default_converter + pandas2ri.converter):
+                r_df = robjects.conversion.py2rpy(df)
+                output_filename = os.path.splitext(filename)[0] + ".rds"
+                output_path = os.path.join('PKdata', output_filename)
+                
+                # 在同一个转换上下文中调用 R 函数
+                saveRDS = robjects.r['saveRDS']
+                saveRDS(r_df, output_path)
             
             return jsonify({
                 'status': 'success', 

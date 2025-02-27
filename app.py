@@ -11,9 +11,9 @@ import plotly.express as px
 import json
 from datetime import timedelta
 import secrets
-#from rpy2 import robjects
-#from rpy2.robjects import pandas2ri
-#from rpy2.robjects.packages import importr
+from rpy2 import robjects
+from rpy2.robjects import pandas2ri
+from rpy2.robjects.packages import importr
 
 # 导入自定义模块
 from modules.data_upload import data_upload_bp
