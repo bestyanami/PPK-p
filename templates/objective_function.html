@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}目标函数计算 - Shiny-PopPK{% endblock %}
+
+{% block page_title %}目标函数计算{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title">目标函数计算</h3>
+            </div>
+            <div class="card-body">
+                <form id="ofvForm">
+                    <div class="mb-3">
+                        <label for="selected_result" class="form-label">选择模型结果</label>
+                        <select class="form-select" id="selected_result" name="selected_result">
+                            <!-- 模型结果列表将通过JavaScript动态填充 -->
+                        </select>
+                        <div class="form-text">从已拟合的模型结果中选择一个进行目标函数计算</div>
+                    </div>
+
+                    <div class="text-center">
+                        <button type="button" id="calculate_ofv_button" class="btn btn-primary">计算目标函数</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h3 class="card-title">目标函数值 (OFV)</h3>
+            </div>
+            <div class="card-body">
+                <div id="ofv_status" class="alert alert-light" role="alert">
+                    选择模型结果并点击计算按钮...
+                </div>
+
+                <div class="mt-4">
+                    <table id="ofv_table" class="table table-bordered table-hover d-none">
+                        <thead class="table-light">
+                            <tr>
+                                <th>模型结果文件</th>
+                                <th>目标函数值</th>
+                                <th>AIC</th>
+                                <th>BIC</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- OFV结果将通过JavaScript动态填充 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header bg-warning text-dark">
+                <h3 class="card-title">模型比较</h3>
+            </div>
+            <div class="card-body">
+                <div id="model_comparison" class="alert alert-light" role="alert">
+                    计算多个模型的目标函数值以进行比较...
+                </div>
+
+                <div id="comparison_chart" style="height: 300px;">
+                    <!-- 比较图表将通过JavaScript动态填充 -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function () {
+        // 页面加载时获取模型结果列表
+        loadModelResults();
+
+        // 计算目标函数按钮点击事件
+        $('#calculate_ofv_button').click(function () {
+            const selectedResult = $('#selected_result').val();
+            if (!selectedResult) {
+                $('#ofv_status').removeClass('alert-light alert-success').addClass('alert-danger');
+                $('#ofv_status').text('请先选择一个模型结果文件！');
+                return;
+            }
+
+            $('#ofv_status').removeClass('alert-success alert-danger').addClass('alert-info');
+            $('#ofv_status').text('正在计算目标函数值...');
+            $('#ofv_table').addClass('d-none');
+
+            $.ajax({
+                url: '{{ url_for("objective_function.calculate_ofv") }}',
+                type: 'POST',
+                data: { 'selected_result': selectedResult },
+                success: function (response) {
+                    if (response.status === 'success') {
+                        $('#ofv_status').removeClass('alert-info alert-danger').addClass('alert-success');
+                        $('#ofv_status').text('目标函数计算完成！');
+
+                        // 填充表格数据
+                        const tableHtml = `
+                            <tr>
+                                <td>${response.data.model_file}</td>
+                                <td>${response.data.ofv}</td>
+                                <td>${response.data.aic || 'N/A'}</td>
+                                <td>${response.data.bic || 'N/A'}</td>
+                            </tr>
+                        `;
+                        $('#ofv_table tbody').html(tableHtml);
+                        $('#ofv_table').removeClass('d-none');
+
+                        // 添加到比较图表
+                        updateModelComparison(response.data);
+                    } else {
+                        $('#ofv_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                        $('#ofv_status').text('错误：' + response.message);
+                    }
+                },
+                error: function () {
+                    $('#ofv_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                    $('#ofv_status').text('计算失败：服务器错误');
+                }
+            });
+        });
+    });
+
+    // 加载模型结果列表
+    function loadModelResults() {
+        $.ajax({
+            url: '{{ url_for("objective_function.model_list") }}',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'success') {
+                    let options = '';
+                    response.model_files.forEach(file => {
+                        options += `<option value="${file}">${file}</option>`;
+                    });
+                    $('#selected_result').html(options);
+                } else {
+                    console.error('获取模型结果列表失败:', response.message);
+                }
+            },
+            error: function () {
+                console.error('获取模型结果列表失败：服务器错误');
+            }
+        });
+    }
+
+    // 模型比较存储
+    let modelComparisonData = [];
+
+    // 更新模型比较图表
+    function updateModelComparison(data) {
+        // 检查是否已存在相同的模型
+        const existingModelIndex = modelComparisonData.findIndex(model => model.model_file === data.model_file);
+        if (existingModelIndex >= 0) {
+            // 更新已存在的模型数据
+            modelComparisonData[existingModelIndex] = data;
+        } else {
+            // 添加新模型数据
+            modelComparisonData.push(data);
+        }
+
+        // 如果有多个模型，显示比较结果
+        if (modelComparisonData.length > 0) {
+            $('#model_comparison').removeClass('alert-light').addClass('alert-info');
+            $('#model_comparison').text(`当前已比较 ${modelComparisonData.length} 个模型`);
+
+            // 绘制比较图表
+            if (modelComparisonData.length > 1) {
+                const models = modelComparisonData.map(d => d.model_file.replace('.ressum.rds', ''));
+                const ofvValues = modelComparisonData.map(d => parseFloat(d.ofv));
+                const aicValues = modelComparisonData.map(d => d.aic ? parseFloat(d.aic) : null);
+                const bicValues = modelComparisonData.map(d => d.bic ? parseFloat(d.bic) : null);
+
+                const traces = [
+                    {
+                        x: models,
+                        y: ofvValues,
+                        type: 'bar',
+                        name: '目标函数值',
+                        marker: {
+                            color: 'rgba(55, 128, 191, 0.7)'
+                        }
+                    }
+                ];
+
+                // 添加AIC和BIC，如果有值的话
+                if (aicValues.some(v => v !== null)) {
+                    traces.push({
+                        x: models,
+                        y: aicValues,
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        name: 'AIC',
+                        yaxis: 'y2',
+                        marker: {
+                            color: 'rgba(219, 64, 82, 0.7)'
+                        }
+                    });
+                }
+
+                if (bicValues.some(v => v !== null)) {
+                    traces.push({
+                        x: models,
+                        y: bicValues,
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        name: 'BIC',
+                        yaxis: 'y2',
+                        marker: {
+                            color: 'rgba(50, 171, 96, 0.7)'
+                        }
+                    });
+                }
+
+                const layout = {
+                    title: '模型目标函数比较',
+                    autosize: true,
+                    yaxis: {
+                        title: '目标函数值 (OFV)'
+                    },
+                    yaxis2: {
+                        title: 'AIC/BIC',
+                        overlaying: 'y',
+                        side: 'right'
+                    },
+                    legend: {
+                        orientation: 'h',
+                        y: -0.2
+                    }
+                };
+
+                Plotly.newPlot('comparison_chart', traces, layout);
+            }
+        }
+    }
+</script>
+{% endblock %}

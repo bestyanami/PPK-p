@@ -1,0 +1,362 @@
+{% extends "base.html" %}
+
+{% block title %}协变量筛选 - Shiny-PopPK{% endblock %}
+
+{% block page_title %}协变量筛选{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-5">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title">协变量筛选设置</h3>
+            </div>
+            <div class="card-body">
+                <form id="screeningForm">
+                    <div class="mb-3">
+                        <label for="selected_data" class="form-label">选择数据集</label>
+                        <select class="form-select" id="selected_data" name="selected_data">
+                            <!-- 数据集列表将通过JavaScript动态填充 -->
+                        </select>
+                        <div class="form-text">从已上传的数据文件中选择一个进行协变量筛选</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">选择协变量</label>
+                        <div class="covariates-container">
+                            <div id="covariates_loading" class="text-center mb-2">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                    <span class="visually-hidden">加载中...</span>
+                                </div>
+                                <span class="ms-2">加载协变量...</span>
+                            </div>
+                            <div id="covariates_list" class="list-group">
+                                <!-- 协变量列表将通过JavaScript动态填充 -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-center">
+                        <button type="button" id="run_screening_button" class="btn btn-primary">运行协变量筛选</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h3 class="card-title">历史结果</h3>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="result_files" class="form-label">历史筛选结果文件</label>
+                    <select class="form-select" id="result_files">
+                        <!-- 结果文件列表将通过JavaScript动态填充 -->
+                    </select>
+                </div>
+                <div class="text-center">
+                    <button type="button" id="load_result_button" class="btn btn-secondary">加载结果</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h3 class="card-title">筛选结果</h3>
+            </div>
+            <div class="card-body">
+                <div id="screening_status" class="alert alert-light" role="alert">
+                    选择数据集和协变量后点击"运行协变量筛选"按钮...
+                </div>
+
+                <div class="table-responsive">
+                    <table id="screening_results" class="table table-bordered table-hover table-striped d-none">
+                        <thead class="table-light">
+                            <tr>
+                                <th>协变量</th>
+                                <th>p值</th>
+                                <th>截距</th>
+                                <th>斜率</th>
+                                <th>R平方</th>
+                                <th>显著性</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 筛选结果将通过JavaScript动态填充 -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="plot_container" class="mt-4 d-none">
+                    <h5>显著性协变量图表</h5>
+                    <div id="significant_plot" style="height: 400px;">
+                        <!-- 图表将通过Plotly.js动态填充 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function () {
+        // 页面加载时获取数据文件列表
+        loadDataList();
+        loadResultFiles();
+
+        // 当数据集选择改变时，获取协变量列表
+        $('#selected_data').change(function () {
+            loadCovariates();
+        });
+
+        // 运行协变量筛选按钮点击事件
+        $('#run_screening_button').click(function () {
+            const selectedCovariates = [];
+            $('.covariate-checkbox:checked').each(function () {
+                selectedCovariates.push($(this).val());
+            });
+
+            if (selectedCovariates.length === 0) {
+                $('#screening_status').removeClass('alert-light alert-success').addClass('alert-danger');
+                $('#screening_status').text('请至少选择一个协变量进行筛选');
+                return;
+            }
+
+            const selectedData = $('#selected_data').val();
+            if (!selectedData) {
+                $('#screening_status').removeClass('alert-light alert-success').addClass('alert-danger');
+                $('#screening_status').text('请先选择一个数据集');
+                return;
+            }
+
+            $('#screening_status').removeClass('alert-success alert-danger').addClass('alert-info');
+            $('#screening_status').text('正在运行协变量筛选分析...');
+            $('#screening_results').addClass('d-none');
+            $('#plot_container').addClass('d-none');
+
+            $.ajax({
+                url: '{{ url_for("covariant_screening.run_screening") }}',
+                type: 'POST',
+                data: {
+                    'selected_data': selectedData,
+                    'selected_covariates[]': selectedCovariates
+                },
+                success: function (response) {
+                    if (response.status === 'success') {
+                        $('#screening_status').removeClass('alert-info alert-danger').addClass('alert-success');
+                        $('#screening_status').text('协变量筛选完成！');
+
+                        displayResults(response.results);
+                        loadResultFiles(); // 刷新结果文件列表
+                    } else {
+                        $('#screening_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                        $('#screening_status').text('错误：' + response.message);
+                    }
+                },
+                error: function () {
+                    $('#screening_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                    $('#screening_status').text('筛选失败：服务器错误');
+                }
+            });
+        });
+
+        // 加载历史结果按钮点击事件
+        $('#load_result_button').click(function () {
+            const selectedFile = $('#result_files').val();
+            if (!selectedFile) {
+                $('#screening_status').removeClass('alert-light alert-success').addClass('alert-danger');
+                $('#screening_status').text('请选择一个结果文件');
+                return;
+            }
+
+            $('#screening_status').removeClass('alert-success alert-danger').addClass('alert-info');
+            $('#screening_status').text('正在加载历史结果...');
+            $('#screening_results').addClass('d-none');
+            $('#plot_container').addClass('d-none');
+
+            $.ajax({
+                url: '{{ url_for("covariant_screening.get_result") }}',
+                type: 'GET',
+                data: {
+                    'file': selectedFile
+                },
+                success: function (response) {
+                    if (response.status === 'success') {
+                        $('#screening_status').removeClass('alert-info alert-danger').addClass('alert-success');
+                        $('#screening_status').text('历史结果加载成功！');
+
+                        displayResults(response.results);
+                    } else {
+                        $('#screening_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                        $('#screening_status').text('错误：' + response.message);
+                    }
+                },
+                error: function () {
+                    $('#screening_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                    $('#screening_status').text('加载结果失败：服务器错误');
+                }
+            });
+        });
+    });
+
+    // 加载数据文件列表
+    function loadDataList() {
+        $.ajax({
+            url: '{{ url_for("covariant_screening.data_list") }}',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'success') {
+                    let options = '';
+                    response.data_files.forEach(file => {
+                        options += `<option value="${file}">${file}</option>`;
+                    });
+                    $('#selected_data').html(options);
+
+                    // 加载第一个数据集的协变量
+                    loadCovariates();
+                } else {
+                    console.error('获取数据文件列表失败:', response.message);
+                }
+            },
+            error: function () {
+                console.error('获取数据文件列表失败：服务器错误');
+            }
+        });
+    }
+
+    // 加载结果文件列表
+    function loadResultFiles() {
+        $.ajax({
+            url: '{{ url_for("covariant_screening.result_list") }}',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'success') {
+                    let options = '';
+                    response.result_files.forEach(file => {
+                        options += `<option value="${file}">${file}</option>`;
+                    });
+                    $('#result_files').html(options);
+                } else {
+                    console.error('获取结果文件列表失败:', response.message);
+                }
+            },
+            error: function () {
+                console.error('获取结果文件列表失败：服务器错误');
+            }
+        });
+    }
+
+    // 加载协变量列表
+    function loadCovariates() {
+        const selectedData = $('#selected_data').val();
+        if (!selectedData) return;
+
+        $('#covariates_loading').show();
+        $('#covariates_list').hide();
+
+        $.ajax({
+            url: '{{ url_for("covariant_screening.get_covariates") }}',
+            type: 'POST',
+            data: {
+                'selected_data': selectedData
+            },
+            success: function (response) {
+                if (response.status === 'success') {
+                    let html = '';
+                    response.covariates.forEach(covariate => {
+                        html += `
+                            <div class="form-check">
+                                <input class="form-check-input covariate-checkbox" type="checkbox" 
+                                       value="${covariate}" id="cov_${covariate}">
+                                <label class="form-check-label" for="cov_${covariate}">
+                                    ${covariate}
+                                </label>
+                            </div>
+                        `;
+                    });
+                    $('#covariates_list').html(html);
+                } else {
+                    $('#covariates_list').html(`<div class="alert alert-danger">${response.message}</div>`);
+                }
+                $('#covariates_loading').hide();
+                $('#covariates_list').show();
+            },
+            error: function () {
+                $('#covariates_list').html('<div class="alert alert-danger">获取协变量列表失败：服务器错误</div>');
+                $('#covariates_loading').hide();
+                $('#covariates_list').show();
+            }
+        });
+    }
+
+    // 显示筛选结果
+    function displayResults(results) {
+        // 更新表格
+        let tableHtml = '';
+        results.forEach(result => {
+            const pValue = result['p值'] !== null ? parseFloat(result['p值']).toFixed(4) : 'N/A';
+            const intercept = result['截距'] !== null ? parseFloat(result['截距']).toFixed(4) : 'N/A';
+            const slope = result['斜率'] !== null ? parseFloat(result['斜率']).toFixed(4) : 'N/A';
+            const rSquared = result['R平方'] !== null ? parseFloat(result['R平方']).toFixed(4) : 'N/A';
+            const significance = result['显著性'] || 'N/A';
+
+            // 根据显著性设置行样式
+            let rowClass = '';
+            if (significance === '显著') {
+                rowClass = 'table-success';
+            } else if (significance === '不显著') {
+                rowClass = 'table-light';
+            } else if (significance === '错误') {
+                rowClass = 'table-danger';
+            }
+
+            tableHtml += `
+                <tr class="${rowClass}">
+                    <td>${result['协变量']}</td>
+                    <td>${pValue}</td>
+                    <td>${intercept}</td>
+                    <td>${slope}</td>
+                    <td>${rSquared}</td>
+                    <td>${significance}</td>
+                </tr>
+            `;
+        });
+        $('#screening_results tbody').html(tableHtml);
+        $('#screening_results').removeClass('d-none');
+
+        // 绘制显著性协变量图表
+        const significantResults = results.filter(result => result['显著性'] === '显著');
+        if (significantResults.length > 0) {
+            const plotData = [{
+                x: significantResults.map(r => r['协变量']),
+                y: significantResults.map(r => parseFloat(r['R平方'])),
+                type: 'bar',
+                marker: {
+                    color: 'rgba(55, 128, 191, 0.7)'
+                },
+                name: 'R平方'
+            }];
+
+            const layout = {
+                title: '显著协变量的解释力度 (R平方)',
+                xaxis: {
+                    title: '协变量'
+                },
+                yaxis: {
+                    title: 'R平方值',
+                    range: [0, 1]
+                }
+            };
+
+            Plotly.newPlot('significant_plot', plotData, layout);
+            $('#plot_container').removeClass('d-none');
+        } else {
+            $('#plot_container').addClass('d-none');
+        }
+    }
+</script>
+{% endblock %}

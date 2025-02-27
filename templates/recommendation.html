@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block title %}剂量推荐 - Shiny-PopPK{% endblock %}
+
+{% block page_title %}剂量推荐{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- 左侧设置面板 -->
+    <div class="col-lg-6">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title">剂量推荐参数</h3>
+            </div>
+            <div class="card-body">
+                <form id="recommendationForm">
+                    <div class="mb-3">
+                        <label for="selected_model" class="form-label">选择模型结果</label>
+                        <select class="form-select" id="selected_model" name="selected_model">
+                            <!-- 模型结果列表将通过JavaScript动态填充 -->
+                        </select>
+                        <div class="form-text">从已拟合的模型中选择一个作为推荐基础</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="desired_dv" class="form-label">期望药物浓度 (DV)</label>
+                        <input type="number" class="form-control" id="desired_dv" name="desired_dv" value="10" min="0"
+                            step="0.1">
+                        <div class="form-text">设置目标药物浓度值</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="loading_dose" class="form-label">加载剂量 (AMT)</label>
+                        <input type="number" class="form-control" id="loading_dose" name="loading_dose" value="100"
+                            min="0" step="1">
+                        <div class="form-text">首次给药的加载剂量</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="maintenance_dose" class="form-label">维持剂量 (AMT)</label>
+                        <input type="number" class="form-control" id="maintenance_dose" name="maintenance_dose"
+                            value="50" min="0" step="1">
+                        <div class="form-text">后续给药的维持剂量</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="interval" class="form-label">给药间隔 (小时)</label>
+                        <input type="number" class="form-control" id="interval" name="interval" value="12" min="1"
+                            step="1">
+                        <div class="form-text">两次给药之间的时间间隔</div>
+                    </div>
+
+                    <div class="text-center">
+                        <button type="button" id="recommend_button" class="btn btn-primary">推荐剂量</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧结果面板 -->
+    <div class="col-lg-6">
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h3 class="card-title">推荐剂量结果</h3>
+            </div>
+            <div class="card-body">
+                <div id="recommendation_status" class="alert alert-light" role="alert">
+                    等待计算推荐剂量...
+                </div>
+                <table id="dose_table" class="table table-bordered table-hover d-none">
+                    <thead class="table-light">
+                        <tr>
+                            <th>加载剂量</th>
+                            <th>维持剂量</th>
+                            <th>给药间隔</th>
+                            <th>期望DV</th>
+                            <th>模拟平均DV</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- 结果将通过JavaScript动态填充 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                <h3 class="card-title">剂量推荐图表</h3>
+            </div>
+            <div class="card-body">
+                <div id="dose_plot" style="height: 400px;">
+                    <!-- 图表将通过JavaScript动态填充 -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function () {
+        // 页面加载时获取模型结果列表
+        loadModelResults();
+
+        // 推荐按钮点击事件
+        $('#recommend_button').click(function () {
+            // 暂时展示提示，当后端功能实现后，可以替换成真实请求
+            $('#recommendation_status').removeClass('alert-light alert-danger').addClass('alert-info');
+            $('#recommendation_status').text('正在计算推荐剂量...');
+
+            // 模拟处理请求延迟
+            setTimeout(function () {
+                // 这里是示例结果，实际应该通过AJAX向后端API发起请求
+                showRecommendationResults({
+                    loading_dose: $('#loading_dose').val(),
+                    maintenance_dose: Math.round($('#loading_dose').val() * 0.8),
+                    interval: $('#interval').val(),
+                    desired_dv: $('#desired_dv').val(),
+                    simulated_dv: Math.round($('#desired_dv').val() * 0.95)
+                });
+
+                // 绘制示例图表
+                drawExamplePlot();
+            }, 1000);
+
+            // 当API实现后，可以替换为以下代码：
+            /*
+            const formData = new FormData($('#recommendationForm')[0]);
+
+            $.ajax({
+                url: '/dose_recommendation/calculate',
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (response) {
+                    if (response.status === 'success') {
+                        showRecommendationResults(response.data);
+                        if (response.plot_data) {
+                            drawPlot(response.plot_data);
+                        }
+                    } else {
+                        $('#recommendation_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                        $('#recommendation_status').text('错误：' + response.message);
+                    }
+                },
+                error: function () {
+                    $('#recommendation_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                    $('#recommendation_status').text('计算失败：服务器错误');
+                }
+            });
+            */
+        });
+    });
+
+    // 加载模型结果列表
+    function loadModelResults() {
+        // 这里模拟加载结果，实际应通过AJAX从后端获取
+        const mockResults = [
+            "Result_20230101010101.ressum.rds",
+            "Result_20230102020202.ressum.rds",
+            "Result_20230103030303.ressum.rds"
+        ];
+
+        let options = '';
+        mockResults.forEach(result => {
+            options += `<option value="${result}">${result}</option>`;
+        });
+
+        $('#selected_model').html(options);
+    }
+
+    // 显示推荐结果
+    function showRecommendationResults(data) {
+        $('#recommendation_status').removeClass('alert-info alert-danger').addClass('alert-success');
+        $('#recommendation_status').text('剂量推荐计算完成！');
+
+        // 填充表格数据
+        const tableHtml = `
+            <tr>
+                <td>${data.loading_dose}</td>
+                <td>${data.maintenance_dose}</td>
+                <td>${data.interval}</td>
+                <td>${data.desired_dv}</td>
+                <td>${data.simulated_dv}</td>
+            </tr>
+        `;
+        $('#dose_table tbody').html(tableHtml);
+        $('#dose_table').removeClass('d-none');
+    }
+
+    // 绘制示例图表
+    function drawExamplePlot() {
+        const time = Array.from({ length: 72 }, (_, i) => i);
+        const dv = time.map(t => {
+            // 模拟简单的药物浓度曲线
+            const dose = parseFloat($('#loading_dose').val());
+            const interval = parseFloat($('#interval').val());
+            const decayRate = 0.1;
+
+            const dosePoints = Math.floor(t / interval);
+            let concentration = dose * Math.exp(-decayRate * (t % interval));
+
+            for (let i = 0; i < dosePoints; i++) {
+                concentration += parseFloat($('#maintenance_dose').val()) * Math.exp(-decayRate * ((t - interval * (i + 1)) % interval));
+            }
+
+            return concentration;
+        });
+
+        const desiredDv = parseFloat($('#desired_dv').val());
+
+        const trace1 = {
+            x: time,
+            y: dv,
+            mode: 'lines',
+            name: '模拟浓度',
+            line: {
+                color: 'rgb(55, 128, 191)',
+                width: 3
+            }
+        };
+
+        const trace2 = {
+            x: [time[0], time[time.length - 1]],
+            y: [desiredDv, desiredDv],
+            mode: 'lines',
+            name: '期望浓度',
+            line: {
+                color: 'rgb(219, 64, 82)',
+                width: 2,
+                dash: 'dash'
+            }
+        };
+
+        const layout = {
+            title: '剂量推荐模拟结果',
+            xaxis: {
+                title: '时间 (小时)'
+            },
+            yaxis: {
+                title: '药物浓度 (DV)'
+            }
+        };
+
+        Plotly.newPlot('dose_plot', [trace1, trace2], layout);
+    }
+
+    // 实际使用时解析后端返回的图表数据并绘制
+    function drawPlot(data) {
+        Plotly.newPlot('dose_plot', data.traces, data.layout);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}基础模型选择 - Shiny-PopPK{% endblock %}
+
+{% block page_title %}基础模型选择{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title">基础模型选择</h3>
+            </div>
+            <div class="card-body">
+                <form id="modelSelectionForm">
+                    <div class="mb-3">
+                        <label for="selected_model" class="form-label">选择模型</label>
+                        <select class="form-select" id="selected_model" name="selected_model">
+                            <!-- 模型列表将通过JavaScript动态填充 -->
+                        </select>
+                        <div class="form-text">从PKModelLibrary文件夹中选择一个模型文件</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="selected_data" class="form-label">选择数据文件</label>
+                        <select class="form-select" id="selected_data" name="selected_data">
+                            <!-- 数据文件列表将通过JavaScript动态填充 -->
+                        </select>
+                        <div class="form-text">从PKdata文件夹中选择一个数据文件</div>
+                    </div>
+
+                    <div class="text-center">
+                        <button type="button" id="run_model_button" class="btn btn-primary">运行模型</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h3 class="card-title">模型结果</h3>
+            </div>
+            <div class="card-body">
+                <div id="model_status" class="alert alert-light" role="alert">
+                    等待运行模型...
+                </div>
+
+                <div class="mt-4">
+                    <h5>模型摘要：</h5>
+                    <pre id="model_summary" class="p-2 bg-light rounded">
+                        <!-- 模型摘要将通过JavaScript动态填充 -->
+                    </pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 页面加载时获取模型列表和数据文件列表
+    $(document).ready(function () {
+        loadModelList();
+        loadDataList();
+
+        // 运行模型按钮点击事件
+        $('#run_model_button').click(function () {
+            const formData = new FormData($('#modelSelectionForm')[0]);
+
+            $('#model_status').removeClass('alert-success alert-danger').addClass('alert-info');
+            $('#model_status').text('模型运行中，这可能需要一些时间...');
+            $('#model_summary').text('');
+
+            $.ajax({
+                url: '{{ url_for("model_selection.run_model") }}',
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (response) {
+                    if (response.status === 'success') {
+                        $('#model_status').removeClass('alert-info alert-danger').addClass('alert-success');
+                        $('#model_status').text('模型运行成功！');
+                        $('#model_summary').text(response.summary || '模型摘要不可用');
+                    } else {
+                        $('#model_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                        $('#model_status').text('错误：' + response.message);
+                    }
+                },
+                error: function () {
+                    $('#model_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                    $('#model_status').text('运行失败：服务器错误');
+                }
+            });
+        });
+    });
+
+    // 获取模型列表
+    function loadModelList() {
+        $.ajax({
+            url: '{{ url_for("model_selection.model_list") }}',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'success') {
+                    populateSelect('#selected_model', response.model_files);
+                } else {
+                    console.error('获取模型列表失败:', response.message);
+                }
+            },
+            error: function () {
+                console.error('获取模型列表失败：服务器错误');
+            }
+        });
+    }
+
+    // 获取数据列表
+    function loadDataList() {
+        $.ajax({
+            url: '{{ url_for("model_selection.data_list") }}',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'success') {
+                    populateSelect('#selected_data', response.data_files);
+                } else {
+                    console.error('获取数据列表失败:', response.message);
+                }
+            },
+            error: function () {
+                console.error('获取数据列表失败：服务器错误');
+            }
+        });
+    }
+
+    // 填充下拉框
+    function populateSelect(selectId, options) {
+        let optionsHtml = '';
+        options.forEach(option => {
+            optionsHtml += `<option value="${option}">${option}</option>`;
+        });
+        $(selectId).html(optionsHtml);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}模型诊断 - Shiny-PopPK{% endblock %}
+
+{% block page_title %}模型诊断{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- 左侧面板 -->
+    <div class="col-lg-5">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title">模型诊断设置</h3>
+            </div>
+            <div class="card-body">
+                <form id="diagnosisForm">
+                    <div class="mb-3">
+                        <label for="selected_result" class="form-label">选择模型结果</label>
+                        <select class="form-select" id="selected_result" name="selected_result">
+                            <!-- 模型结果列表将通过JavaScript动态填充 -->
+                        </select>
+                        <div class="form-text">从已拟合的模型结果中选择一个进行诊断</div>
+                    </div>
+
+                    <div class="text-center">
+                        <button type="button" id="run_diagnosis_button" class="btn btn-primary">运行模型诊断</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 历史结果加载 -->
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h3 class="card-title">历史诊断结果</h3>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="result_files" class="form-label">历史诊断结果文件</label>
+                    <select class="form-select" id="result_files">
+                        <!-- 结果文件列表将通过JavaScript动态填充 -->
+                    </select>
+                </div>
+                <div class="text-center">
+                    <button type="button" id="load_result_button" class="btn btn-secondary">加载结果</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧结果面板 -->
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h3 class="card-title">诊断结果</h3>
+            </div>
+            <div class="card-body">
+                <div id="diagnosis_status" class="alert alert-light" role="alert">
+                    选择模型结果并点击"运行模型诊断"按钮...
+                </div>
+
+                <div id="metrics_container" class="mt-3 d-none">
+                    <h5>模型评估指标</h5>
+                    <table id="metrics_table" class="table table-bordered table-hover table-striped">
+                        <thead class="table-light">
+                            <tr>
+                                <th>指标</th>
+                                <th>值</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 指标数据将通过JavaScript动态填充 -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="plots_container" class="mt-4 d-none">
+                    <ul class="nav nav-tabs" id="diagnosisTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="gof-tab" data-bs-toggle="tab" data-bs-target="#gof"
+                                type="button" role="tab" aria-controls="gof" aria-selected="true">拟合优度</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="residual-tab" data-bs-toggle="tab" data-bs-target="#residual"
+                                type="button" role="tab" aria-controls="residual" aria-selected="false">残差分析</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="prediction-tab" data-bs-toggle="tab"
+                                data-bs-target="#prediction" type="button" role="tab" aria-controls="prediction"
+                                aria-selected="false">预测对比</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content" id="diagnosisTabContent">
+                        <div class="tab-pane fade show active" id="gof" role="tabpanel" aria-labelledby="gof-tab">
+                            <div id="gof_plot" style="height: 450px;" class="mt-3">
+                                <!-- 图表将通过Plotly.js动态填充 -->
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="residual" role="tabpanel" aria-labelledby="residual-tab">
+                            <div id="residual_plot" style="height: 450px;" class="mt-3">
+                                <!-- 图表将通过Plotly.js动态填充 -->
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="prediction" role="tabpanel" aria-labelledby="prediction-tab">
+                            <div id="pred_vs_obs_plot" style="height: 450px;" class="mt-3">
+                                <!-- 图表将通过Plotly.js动态填充 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function () {
+        // 页面加载时获取模型结果列表和历史结果列表
+        loadModelResults();
+        loadResultFiles();
+
+        // 运行模型诊断按钮点击事件
+        $('#run_diagnosis_button').click(function () {
+            const selectedResult = $('#selected_result').val();
+            if (!selectedResult) {
+                $('#diagnosis_status').removeClass('alert-light alert-success').addClass('alert-danger');
+                $('#diagnosis_status').text('请选择一个模型结果文件！');
+                return;
+            }
+
+            $('#diagnosis_status').removeClass('alert-success alert-danger').addClass('alert-info');
+            $('#diagnosis_status').text('正在运行模型诊断...');
+            $('#metrics_container').addClass('d-none');
+            $('#plots_container').addClass('d-none');
+
+            $.ajax({
+                url: '{{ url_for("model_diagnosis.run_diagnosis") }}',
+                type: 'POST',
+                data: { 'selected_result': selectedResult },
+                success: function (response) {
+                    if (response.status === 'success') {
+                        $('#diagnosis_status').removeClass('alert-info alert-danger').addClass('alert-success');
+                        $('#diagnosis_status').text('模型诊断完成！');
+
+                        // 显示诊断结果
+                        displayDiagnosisResults(response.data);
+                        loadResultFiles(); // 刷新结果文件列表
+                    } else {
+                        $('#diagnosis_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                        $('#diagnosis_status').text('错误：' + response.message);
+                    }
+                },
+                error: function () {
+                    $('#diagnosis_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                    $('#diagnosis_status').text('诊断失败：服务器错误');
+                }
+            });
+        });
+
+        // 加载历史结果按钮点击事件
+        $('#load_result_button').click(function () {
+            const selectedFile = $('#result_files').val();
+            if (!selectedFile) {
+                $('#diagnosis_status').removeClass('alert-light alert-success').addClass('alert-danger');
+                $('#diagnosis_status').text('请选择一个结果文件');
+                return;
+            }
+
+            $('#diagnosis_status').removeClass('alert-success alert-danger').addClass('alert-info');
+            $('#diagnosis_status').text('正在加载历史结果...');
+            $('#metrics_container').addClass('d-none');
+            $('#plots_container').addClass('d-none');
+
+            $.ajax({
+                url: '{{ url_for("model_diagnosis.get_result") }}',
+                type: 'GET',
+                data: { 'file': selectedFile },
+                success: function (response) {
+                    if (response.status === 'success') {
+                        $('#diagnosis_status').removeClass('alert-info alert-danger').addClass('alert-success');
+                        $('#diagnosis_status').text('历史结果加载成功！');
+
+                        // 显示诊断结果
+                        displayDiagnosisResults(response.data);
+                    } else {
+                        $('#diagnosis_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                        $('#diagnosis_status').text('错误：' + response.message);
+                    }
+                },
+                error: function () {
+                    $('#diagnosis_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                    $('#diagnosis_status').text('加载失败：服务器错误');
+                }
+            });
+        });
+    });
+
+    // 加载模型结果列表
+    function loadModelResults() {
+        $.ajax({
+            url: '{{ url_for("model_diagnosis.model_list") }}',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'success') {
+                    let options = '';
+                    response.model_files.forEach(file => {
+                        options += `<option value="${file}">${file}</option>`;
+                    });
+                    $('#selected_result').html(options);
+                } else {
+                    console.error('获取模型结果列表失败:', response.message);
+                }
+            },
+            error: function () {
+                console.error('获取模型结果列表失败：服务器错误');
+            }
+        });
+    }
+
+    // 加载结果文件列表
+    function loadResultFiles() {
+        $.ajax({
+            url: '{{ url_for("model_diagnosis.result_list") }}',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'success') {
+                    let options = '';
+                    response.result_files.forEach(file => {
+                        options += `<option value="${file}">${file}</option>`;
+                    });
+                    $('#result_files').html(options);
+                } else {
+                    console.error('获取结果文件列表失败:', response.message);
+                }
+            },
+            error: function () {
+                console.error('获取结果文件列表失败：服务器错误');
+            }
+        });
+    }
+
+    // 显示诊断结果
+    function displayDiagnosisResults(data) {
+        // 填充指标表格
+        let metricsHtml = '';
+        data.metrics.forEach(metric => {
+            metricsHtml += `
+                <tr>
+                    <td>${metric.指标}</td>
+                    <td>${metric.值}</td>
+                </tr>
+            `;
+        });
+        $('#metrics_table tbody').html(metricsHtml);
+        $('#metrics_container').removeClass('d-none');
+
+        // 绘制拟合优度图
+        if (data.gof_plot) {
+            Plotly.newPlot('gof_plot', data.gof_plot.data, data.gof_plot.layout);
+        }
+
+        // 绘制残差分析图
+        if (data.residual_plot) {
+            Plotly.newPlot('residual_plot', data.residual_plot.data, data.residual_plot.layout);
+        }
+
+        // 绘制预测对比图
+        if (data.pred_vs_obs_plot) {
+            Plotly.newPlot('pred_vs_obs_plot', data.pred_vs_obs_plot.data, data.pred_vs_obs_plot.layout);
+        }
+
+        // 显示图表容器
+        $('#plots_container').removeClass('d-none');
+    }
+</script>
+{% endblock %}

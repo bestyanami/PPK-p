@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}数据上传 - Shiny-PopPK{% endblock %}
+
+{% block page_title %}数据读入{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title">上传数据文件</h3>
+            </div>
+            <div class="card-body">
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="data_file" class="form-label">选择 CSV 文件</label>
+                        <input type="file" class="form-control" id="data_file" name="data_file" accept=".csv">
+                        <div class="form-text">支持的格式：CSV</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="col_id" class="form-label">ID 患者编号列名</label>
+                        <input type="text" class="form-control" id="col_id" name="col_id" value="ID">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="col_time" class="form-label">TIME 给药或测量的时间点（小时）列名</label>
+                        <input type="text" class="form-control" id="col_time" name="col_time" value="TIME">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="col_dv" class="form-label">DV 观测值列名</label>
+                        <input type="text" class="form-control" id="col_dv" name="col_dv" value="DV">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="col_amt" class="form-label">AMT 给药剂量列名</label>
+                        <input type="text" class="form-control" id="col_amt" name="col_amt" value="AMT">
+                    </div>
+
+                    <div class="text-center">
+                        <button type="button" id="upload_button" class="btn btn-primary">上传数据</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h3 class="card-title">上传状态</h3>
+            </div>
+            <div class="card-body">
+                <div id="upload_status" class="alert alert-light" role="alert">
+                    等待上传文件...
+                </div>
+
+                <div class="mt-4">
+                    <h5>已上传文件列表：</h5>
+                    <ul id="file_list" class="list-group">
+                        <!-- 文件列表将通过JavaScript动态填充 -->
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 页面加载时获取文件列表
+    $(document).ready(function () {
+        updateFileList();
+
+        // 上传按钮点击事件
+        $('#upload_button').click(function () {
+            const formData = new FormData($('#uploadForm')[0]);
+
+            $('#upload_status').removeClass('alert-success alert-danger').addClass('alert-info');
+            $('#upload_status').text('文件上传中...');
+
+            $.ajax({
+                url: '{{ url_for("data_upload.upload_data") }}',
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (response) {
+                    if (response.status === 'success') {
+                        $('#upload_status').removeClass('alert-info alert-danger').addClass('alert-success');
+                        $('#upload_status').text(response.message);
+                        updateFileList();
+                    } else {
+                        $('#upload_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                        $('#upload_status').text('错误：' + response.message);
+                    }
+                },
+                error: function () {
+                    $('#upload_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                    $('#upload_status').text('上传失败：服务器错误');
+                }
+            });
+        });
+    });
+
+    // 获取已上传的文件列表
+    function updateFileList() {
+        $.ajax({
+            url: '{{ url_for("data_upload.file_list") }}',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'success') {
+                    let listHtml = '';
+                    if (response.files.length > 0) {
+                        response.files.forEach(file => {
+                            listHtml += `<li class="list-group-item">${file}</li>`;
+                        });
+                    } else {
+                        listHtml = '<li class="list-group-item text-muted">暂无上传文件</li>';
+                    }
+                    $('#file_list').html(listHtml);
+                } else {
+                    $('#file_list').html('<li class="list-group-item text-danger">获取文件列表失败</li>');
+                }
+            },
+            error: function () {
+                $('#file_list').html('<li class="list-group-item text-danger">服务器错误，无法获取文件列表</li>');
+            }
+        });
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,10 @@
+flask                  # Web框架
+#rpy2                   # R语言接口
+flask-login            # 用户认证
+flask-wtf              # 表单处理
+pandas                 # 数据处理
+numpy                  # 数学计算
+plotly                 # 图表绘制
+dash                   # 交互式数据可视化(可选)
+bootstrap-flask        # Bootstrap集成
+openpyxl               # Excel文件处理

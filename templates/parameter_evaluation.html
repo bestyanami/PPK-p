@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+
+{% block title %}参数评估 - Shiny-PopPK{% endblock %}
+
+{% block page_title %}参数评估{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- 左侧面板 -->
+    <div class="col-lg-5">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title">参数评估设置</h3>
+            </div>
+            <div class="card-body">
+                <form id="parameterForm">
+                    <div class="mb-3">
+                        <label for="selected_result" class="form-label">选择模型结果</label>
+                        <select class="form-select" id="selected_result" name="selected_result">
+                            <!-- 模型结果列表将通过JavaScript动态填充 -->
+                        </select>
+                        <div class="form-text">从已拟合的模型结果中选择一个进行参数评估</div>
+                    </div>
+
+                    <div class="text-center">
+                        <button type="button" id="evaluate_params_button" class="btn btn-primary">评估参数</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 历史结果加载 -->
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h3 class="card-title">历史评估结果</h3>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="result_files" class="form-label">历史评估结果文件</label>
+                    <select class="form-select" id="result_files">
+                        <!-- 结果文件列表将通过JavaScript动态填充 -->
+                    </select>
+                </div>
+                <div class="text-center">
+                    <button type="button" id="load_result_button" class="btn btn-secondary">加载结果</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧结果面板 -->
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h3 class="card-title">参数估计结果</h3>
+            </div>
+            <div class="card-body">
+                <div id="parameter_status" class="alert alert-light" role="alert">
+                    选择模型结果并点击"评估参数"按钮...
+                </div>
+
+                <div class="table-responsive mt-3 d-none" id="params_table_container">
+                    <h5>参数估计值</h5>
+                    <table id="params_table" class="table table-bordered table-hover table-striped">
+                        <thead class="table-light">
+                            <tr>
+                                <th>参数</th>
+                                <th>估计值</th>
+                                <th>标准误</th>
+                                <th>相对标准误(%)</th>
+                                <th>95%置信区间下限</th>
+                                <th>95%置信区间上限</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 参数估计值将通过JavaScript动态填充 -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="plot_container" class="mt-4 d-none">
+                    <h5>参数估计值及置信区间</h5>
+                    <div id="params_plot" style="height: 400px;">
+                        <!-- 图表将通过Plotly.js动态填充 -->
+                    </div>
+
+                    <h5 class="mt-4">参数相关性</h5>
+                    <div id="correlation_plot" style="height: 400px;">
+                        <!-- 相关性图表将通过Plotly.js动态填充 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function () {
+        // 页面加载时获取模型结果列表和历史结果列表
+        loadModelResults();
+        loadResultFiles();
+
+        // 评估参数按钮点击事件
+        $('#evaluate_params_button').click(function () {
+            const selectedResult = $('#selected_result').val();
+            if (!selectedResult) {
+                $('#parameter_status').removeClass('alert-light alert-success').addClass('alert-danger');
+                $('#parameter_status').text('请选择一个模型结果文件！');
+                return;
+            }
+
+            $('#parameter_status').removeClass('alert-success alert-danger').addClass('alert-info');
+            $('#parameter_status').text('正在评估参数...');
+            $('#params_table_container').addClass('d-none');
+            $('#plot_container').addClass('d-none');
+
+            $.ajax({
+                url: '{{ url_for("parameter_evaluation.evaluate_params") }}',
+                type: 'POST',
+                data: { 'selected_result': selectedResult },
+                success: function (response) {
+                    if (response.status === 'success') {
+                        $('#parameter_status').removeClass('alert-info alert-danger').addClass('alert-success');
+                        $('#parameter_status').text('参数评估完成！');
+
+                        // 显示参数表格和图表
+                        displayParameterResults(response.data);
+                        loadResultFiles(); // 刷新结果文件列表
+                    } else {
+                        $('#parameter_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                        $('#parameter_status').text('错误：' + response.message);
+                    }
+                },
+                error: function () {
+                    $('#parameter_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                    $('#parameter_status').text('评估失败：服务器错误');
+                }
+            });
+        });
+
+        // 加载历史结果按钮点击事件
+        $('#load_result_button').click(function () {
+            const selectedFile = $('#result_files').val();
+            if (!selectedFile) {
+                $('#parameter_status').removeClass('alert-light alert-success').addClass('alert-danger');
+                $('#parameter_status').text('请选择一个结果文件');
+                return;
+            }
+
+            $('#parameter_status').removeClass('alert-success alert-danger').addClass('alert-info');
+            $('#parameter_status').text('正在加载历史结果...');
+            $('#params_table_container').addClass('d-none');
+            $('#plot_container').addClass('d-none');
+
+            $.ajax({
+                url: '{{ url_for("parameter_evaluation.get_result") }}',
+                type: 'GET',
+                data: { 'file': selectedFile },
+                success: function (response) {
+                    if (response.status === 'success') {
+                        $('#parameter_status').removeClass('alert-info alert-danger').addClass('alert-success');
+                        $('#parameter_status').text('历史结果加载成功！');
+
+                        // 显示参数表格和图表
+                        displayParameterResults(response.data);
+                    } else {
+                        $('#parameter_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                        $('#parameter_status').text('错误：' + response.message);
+                    }
+                },
+                error: function () {
+                    $('#parameter_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                    $('#parameter_status').text('加载失败：服务器错误');
+                }
+            });
+        });
+    });
+
+    // 加载模型结果列表
+    function loadModelResults() {
+        $.ajax({
+            url: '{{ url_for("parameter_evaluation.model_list") }}',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'success') {
+                    let options = '';
+                    response.model_files.forEach(file => {
+                        options += `<option value="${file}">${file}</option>`;
+                    });
+                    $('#selected_result').html(options);
+                } else {
+                    console.error('获取模型结果列表失败:', response.message);
+                }
+            },
+            error: function () {
+                console.error('获取模型结果列表失败：服务器错误');
+            }
+        });
+    }
+
+    // 加载结果文件列表
+    function loadResultFiles() {
+        $.ajax({
+            url: '{{ url_for("parameter_evaluation.result_list") }}',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'success') {
+                    let options = '';
+                    response.result_files.forEach(file => {
+                        options += `<option value="${file}">${file}</option>`;
+                    });
+                    $('#result_files').html(options);
+                } else {
+                    console.error('获取结果文件列表失败:', response.message);
+                }
+            },
+            error: function () {
+                console.error('获取结果文件列表失败：服务器错误');
+            }
+        });
+    }
+
+    // 显示参数评估结果
+    function displayParameterResults(data) {
+        // 填充参数表格
+        let tableHtml = '';
+        data.parameters.forEach(param => {
+            tableHtml += `
+                <tr>
+                    <td>${param.参数}</td>
+                    <td>${param.估计值}</td>
+                    <td>${param.标准误}</td>
+                    <td>${param.相对标准误}</td>
+                    <td>${param.下限}</td>
+                    <td>${param.上限}</td>
+                </tr>
+            `;
+        });
+        $('#params_table tbody').html(tableHtml);
+        $('#params_table_container').removeClass('d-none');
+
+        // 绘制参数估计值及置信区间图表
+        const params = data.parameters.map(p => p.参数);
+        const estimates = data.parameters.map(p => p.估计值);
+        const lowerCIs = data.parameters.map(p => p.下限);
+        const upperCIs = data.parameters.map(p => p.上限);
+        const errors = data.parameters.map(p => [p.下限, p.上限]);
+
+        const paramPlotData = [{
+            type: 'scatter',
+            x: params,
+            y: estimates,
+            mode: 'markers',
+            marker: {
+                size: 10,
+                color: 'rgba(55, 128, 191, 0.7)'
+            },
+            name: '估计值',
+            error_y: {
+                type: 'data',
+                symmetric: false,
+                array: upperCIs.map((upper, i) => upper - estimates[i]),
+                arrayminus: estimates.map((estimate, i) => estimate - lowerCIs[i]),
+                width: 4
+            }
+        }];
+
+        const paramLayout = {
+            title: '参数估计值及95%置信区间',
+            xaxis: {
+                title: '参数'
+            },
+            yaxis: {
+                title: '估计值'
+            }
+        };
+
+        Plotly.newPlot('params_plot', paramPlotData, paramLayout);
+
+        // 绘制参数相关性热图
+        if (data.correlation_matrix && data.correlation_matrix.length > 0) {
+            // 从相关性矩阵中提取唯一的参数名
+            const uniqueParams = [...new Set(
+                data.correlation_matrix.flatMap(item => [item.param1, item.param2])
+            )];
+
+            // 创建相关性矩阵
+            const matrix = [];
+            uniqueParams.forEach((param1, i) => {
+                const row = [];
+                uniqueParams.forEach((param2, j) => {
+                    if (i === j) {
+                        row.push(1); // 对角线上全是1
+                    } else {
+                        // 查找相关性
+                        const corr = data.correlation_matrix.find(
+                            item => (item.param1 === param1 && item.param2 === param2) ||
+                                (item.param1 === param2 && item.param2 === param1)
+                        );
+                        row.push(corr ? corr.correlation : 0);
+                    }
+                });
+                matrix.push(row);
+            });
+
+            const heatmapData = [{
+                z: matrix,
+                x: uniqueParams,
+                y: uniqueParams,
+                type: 'heatmap',
+                colorscale: 'RdBu',
+                zmin: -1,
+                zmax: 1
+            }];
+
+            const heatmapLayout = {
+                title: '参数相关性矩阵',
+                annotations: []
+            };
+
+            // 添加相关系数标签
+            for (let i = 0; i < uniqueParams.length; i++) {
+                for (let j = 0; j < uniqueParams.length; j++) {
+                    const value = matrix[i][j];
+                    heatmapLayout.annotations.push({
+                        x: uniqueParams[j],
+                        y: uniqueParams[i],
+                        text: value.toFixed(2),
+                        showarrow: false,
+                        font: {
+                            color: Math.abs(value) > 0.5 ? 'white' : 'black'
+                        }
+                    });
+                }
+            }
+
+            Plotly.newPlot('correlation_plot', heatmapData, heatmapLayout);
+        }
+
+        // 显示图表容器
+        $('#plot_container').removeClass('d-none');
+    }
+</script>
+{% endblock %}

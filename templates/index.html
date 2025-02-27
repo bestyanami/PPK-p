@@ -1,0 +1,127 @@
+<!-- templates/index.html -->
+{% extends "base.html" %}
+
+{% block title %}首页 - Shiny-PopPK{% endblock %}
+
+{% block page_title %}群体药动学建模与剂量优化系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title">欢迎使用PopPK系统</h3>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <h4 class="alert-heading">系统已准备就绪！</h4>
+                    <p>使用左侧导航栏开始您的群体药动学建模工作。</p>
+                </div>
+
+                <div class="row mt-4">
+                    <!-- 第一行 -->
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-upload text-primary"></i> 数据读入</h5>
+                                <p class="card-text">上传并准备您的数据集，支持CSV格式文件。</p>
+                                <a href="{{ url_for('data_upload.data_upload_page') }}"
+                                    class="btn btn-sm btn-outline-primary">开始上传</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-chart-bar text-success"></i> 数据探索</h5>
+                                <p class="card-text">可视化您的数据以发现趋势和模式。</p>
+                                <a href="{{ url_for('data_exploration.exploration_page') }}"
+                                    class="btn btn-sm btn-outline-success">数据分析</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-cube text-info"></i> 模型选择</h5>
+                                <p class="card-text">选择适合您数据的基础群体药动学模型。</p>
+                                <a href="{{ url_for('model_selection.model_selection_page') }}"
+                                    class="btn btn-sm btn-outline-info">选择模型</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-calculator text-warning"></i> 目标函数计算</h5>
+                                <p class="card-text">计算和比较模型的目标函数值。</p>
+                                <a href="{{ url_for('objective_function.objective_function_page') }}"
+                                    class="btn btn-sm btn-outline-warning">计算评价</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 第二行 -->
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-filter text-secondary"></i> 协变量筛选</h5>
+                                <p class="card-text">分析各种协变量对药动学参数的影响。</p>
+                                <a href="{{ url_for('covariant_screening.screening_page') }}"
+                                    class="btn btn-sm btn-outline-secondary">筛选协变量</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-sliders-h text-dark"></i> 参数评估</h5>
+                                <p class="card-text">评估模型参数的估计值和统计学特性。</p>
+                                <a href="{{ url_for('parameter_evaluation.parameter_evaluation_page') }}"
+                                    class="btn btn-sm btn-outline-dark">分析参数</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-stethoscope text-primary"></i> 模型诊断</h5>
+                                <p class="card-text">通过各种图表和统计量诊断模型适合度。</p>
+                                <a href="{{ url_for('model_diagnosis.diagnosis_page') }}"
+                                    class="btn btn-sm btn-outline-primary">进行诊断</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-pills text-danger"></i> 剂量推荐</h5>
+                                <p class="card-text">基于模型结果进行个体化剂量优化。</p>
+                                <a href="{{ url_for('dose_recommendation.recommendation_page') }}"
+                                    class="btn btn-sm btn-outline-danger">剂量优化</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <div class="text-center">
+                    <h5>开发进度</h5>
+                    <div class="progress">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: 85%;" aria-valuenow="35"
+                            aria-valuemin="0" aria-valuemax="100">85%</div>
+                    </div>
+                    <small class="text-muted mt-2 d-block">正在不断完善中，敬请期待更多功能</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
