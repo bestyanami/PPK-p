@@ -3,6 +3,21 @@
 # 设置全局选项
 options(stringsAsFactors = FALSE)
 
+# 加载必要的包
+library(shiny)
+library(shinydashboard)
+library(shiny.router)
+library(ggplot2)
+library(nlmixr2)
+library(shinyjs)
+library(DT)
+library(readr)
+library(markdown)
+library(dplyr)
+
+# 告诉静态分析工具这些全局函数是已定义的
+utils::globalVariables(c("NS", "moduleServer", "shinyApp", "source", "lapply", "list.files"))
+
 # 指定数据和模型的文件夹路径
 data_folder <- "PKdata"
 model_library_folder <- "PKModelLibrary"
@@ -13,6 +28,17 @@ pe_results_folder <- "PKPEResultsFolder"
 drawing_folder <- "PKDrawingFolder"
 pl_model_folder <- "PLModelFolder"
 pl_data_folder <- "PLData"
+
+# 确保所有文件夹存在
+dir.create(data_folder, showWarnings = FALSE)
+dir.create(model_library_folder, showWarnings = FALSE)
+dir.create(base_model_folder, showWarnings = FALSE)
+dir.create(results_folder, showWarnings = FALSE)
+dir.create(covariates_folder, showWarnings = FALSE)
+dir.create(pe_results_folder, showWarnings = FALSE)
+dir.create(drawing_folder, showWarnings = FALSE)
+dir.create(pl_model_folder, showWarnings = FALSE)
+dir.create(pl_data_folder, showWarnings = FALSE)
 
 # 定义常用的全局函数
 
@@ -33,7 +59,7 @@ overall_ofv <- function(results_folder) {
   res_files <- list.files(results_folder, pattern = "\\.ressum\\.rds$")
   ofv_list <- sapply(res_files, function(file) {
     res_sum <- readRDS(file.path(results_folder, file))
-    ofv <- res_sum$ofv  # 假设结果摘要中包含 ofv 值
+    ofv <- res_sum$ofv # 假设结果摘要中包含 ofv 值
     return(ofv)
   })
   names(ofv_list) <- res_files
@@ -58,3 +84,6 @@ Extractparm <- function(model_file) {
   }
 }
 
+# 动态加载模块
+modules_files <- list.files("modules", pattern = "\\.[Rr]$", full.names = TRUE)
+lapply(modules_files, source)
