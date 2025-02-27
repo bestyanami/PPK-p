@@ -36,20 +36,31 @@ jobs:
       shell: bash -l {0}
       run: |
         conda activate ppk-env
+        
+        # 创建必要的目录
+        mkdir -p PKdata PKModelLibrary PKBaseModelFolder PKObjResultsFolder PKCovariatesFolder PKPEResultsFolder PKDrawingFolder PLModelFolder PLData
+        
         # 启动Flask应用作为后台进程
-        python -c "from app import app; import threading; threading.Thread(target=lambda: app.run(debug=False)).start()" &
+        python -c "from app import app; import threading; threading.Thread(target=lambda: app.run(debug=False, host='0.0.0.0')).start()" &
+        APP_PID=$!
         
-        # 等待应用启动
-        sleep 2
+        sleep 3
         
-        # 测试应用是否响应
-        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/)
+        # 获取并显示响应码
+        RESPONSE=$(curl --retry 10 --retry-delay 1 --retry-connrefused --max-time 5 -s -o /dev/null -w "%{http_code}" http://localhost:5000/)
+        echo "收到HTTP响应码: $RESPONSE"
+        
+        # 终止Flask进程
+        if ps -p $APP_PID > /dev/null; then
+          echo "终止Flask进程 PID: $APP_PID"
+          kill $APP_PID
+        fi
+        pkill -f "python -c.*app.run" || true
         
         # 检查响应码是否为200或302（重定向到登录页）
-        if [[ "$RESPONSE" == "200" || "$RESPONSE" == "302" ]]; then
+        if [ "$RESPONSE" = "200" ] || [ "$RESPONSE" = "302" ]; then
           echo "应用程序启动成功，状态码: $RESPONSE"
-          exit 0
         else
           echo "应用程序测试失败，状态码: $RESPONSE"
-          exit 1
+          exit 100
         fi
