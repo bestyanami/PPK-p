@@ -13,10 +13,10 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
-    - name: Set up Python
+    - name: Set up Python 3.11
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
+        python-version: '3.11'
         
     - name: Set up R
       uses: r-lib/actions/setup-r@v2
@@ -29,45 +29,29 @@ jobs:
         sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev libssl-dev libxml2-dev
         R -e 'install.packages(c("shiny", "ggplot2", "dplyr", "readr", "markdown"), repos="https://cloud.r-project.org/")'
         
-    - name: Install Miniconda
-      uses: conda-incubator/setup-miniconda@v2
-      with:
-        auto-update-conda: true
-        python-version: '3.10'
-        activate-environment: ppk-env
-        
-    - name: Install dependencies
-      shell: bash -l {0}
+    - name: Install Python dependencies
       run: |
-        conda activate ppk-env
-        conda install -c conda-forge flask flask-login pandas numpy plotly
+        python -m pip install --upgrade pip
         export R_HOME=$(R RHOME)
         echo "R_HOME=$R_HOME" >> $GITHUB_ENV
+        sudo apt-get install -y python3-dev
         pip install -r requirements.txt
         
     - name: Test application startup
-      shell: bash -l {0}
       run: |
-        conda activate ppk-env
         export R_HOME=$(R RHOME)
-        
-        # 创建必要的目录
         mkdir -p PKdata PKModelLibrary PKBaseModelFolder PKObjResultsFolder PKCovariatesFolder PKPEResultsFolder PKDrawingFolder PLModelFolder PLData
         
         # 添加测试数据和模型（如果需要的话）
         echo "# 示例模型文件" > PKModelLibrary/example_model.R
         
-        # 启动Flask应用作为后台进程
         python -c "from app import app; import threading; threading.Thread(target=lambda: app.run(debug=False, host='0.0.0.0')).start()" &
         APP_PID=$!
         
         sleep 3
-        
-        # 获取并显示响应码
         RESPONSE=$(curl --retry 10 --retry-delay 1 --retry-connrefused --max-time 5 -s -o /dev/null -w "%{http_code}" http://localhost:5000/)
         echo "收到HTTP响应码: $RESPONSE"
-        
-        # 终止Flask进程
+
         if ps -p $APP_PID > /dev/null; then
           echo "终止Flask进程 PID: $APP_PID"
           kill $APP_PID
