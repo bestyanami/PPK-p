@@ -12,8 +12,10 @@ jobs:
       - run:
           name: 安装 R
           command: |
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends r-base=4.2.0* libcurl4-openssl-dev libssl-dev libxml2-dev
+            sudo add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/'
+            sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys E084DAB9
+            sudo apt update
+            sudo apt-get install -y --no-install-recommends r-base=4.2.* libcurl4-openssl-dev libssl-dev libxml2-dev
       
       # 安装 R 依赖项
       - run:
