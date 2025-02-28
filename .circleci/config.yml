@@ -3,48 +3,63 @@ version: 2.1
 jobs:
   test:
     docker:
-      - image: cimg/python:3.11
+      - image: ubuntu:latest
     
     steps:
       - checkout
       
-      # 设置 R 环境
+      - run:
+          name: 设置非交互式前端
+          command: |
+            export DEBIAN_FRONTEND=noninteractive
+            echo 'tzdata tzdata/Areas select Etc' | debconf-set-selections
+            echo 'tzdata tzdata/Zones/Etc select UTC' | debconf-set-selections
+            
+      - run:
+          name: 安装基础依赖项
+          command: |
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update
+            apt-get install -y software-properties-common wget curl sudo tzdata
+            
+      - run:
+          name: 安装 Python
+          command: |
+            sudo apt-get install -y python3 python3-pip python3-dev python3-venv
+            python3 -m pip install --upgrade pip
+      
       - run:
           name: 安装 R
           command: |
-            sudo add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/'
-            sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys E084DAB9
-            sudo apt update
-            sudo apt-get install -y --no-install-recommends r-base=4.2.* libcurl4-openssl-dev libssl-dev libxml2-dev
+            sudo apt-get install --yes dirmngr
+            wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | sudo tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc
+            sudo add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/"
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends r-base r-base-dev libcurl4-openssl-dev libssl-dev libxml2-dev
       
-      # 安装 R 依赖项
       - run:
           name: 安装 R 依赖项
           command: |
-            sudo R -e 'install.packages(c("shiny", "ggplot2", "dplyr", "readr", "markdown"), repos="https://cloud.r-project.org/")'
+            sudo R -e 'install.packages(c("shiny", "ggplot2", "dplyr", "readr", "markdown"), repos="https://cloud.r-project.org/", type="binary")'
       
-      # 安装 Python 依赖项
       - run:
-          name: 安装 Python 依赖项
+          name: 创建 Python 虚拟环境并安装依赖项
           command: |
-            python -m pip install --upgrade pip
-            export R_HOME=$(R RHOME)
-            echo "export R_HOME=$R_HOME" >> $BASH_ENV
-            source $BASH_ENV
-            sudo apt-get install -y python3-dev
+            python3 -m venv venv
+            . venv/bin/activate
             pip install -r requirements.txt
       
-      # 测试应用程序启动
       - run:
           name: 测试应用程序启动
           command: |
+            . venv/bin/activate
             mkdir -p PKdata PKModelLibrary PKBaseModelFolder PKObjResultsFolder PKCovariatesFolder PKPEResultsFolder PKDrawingFolder PLModelFolder PLData
             
             # 添加测试数据和模型
             echo "# 示例模型文件" > PKModelLibrary/example_model.R
             
             # 在后台启动 Flask 应用程序
-            python -c "from app import app; import threading; threading.Thread(target=lambda: app.run(debug=False, host='0.0.0.0')).start()" &
+            python3 -c "from app import app; import threading; threading.Thread(target=lambda: app.run(debug=False, host='0.0.0.0')).start()" &
             APP_PID=$!
             
             # 等待应用程序启动
@@ -59,7 +74,7 @@ jobs:
               echo "终止Flask进程 PID: $APP_PID"
               kill $APP_PID
             fi
-            pkill -f "python -c.*app.run" || true
+            pkill -f "python3 -c.*app.run" || true
             
             # 检查响应码
             if [ "$RESPONSE" = "200" ] || [ "$RESPONSE" = "302" ]; then
