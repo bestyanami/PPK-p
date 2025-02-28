@@ -1,0 +1,79 @@
+version: 2.1
+
+jobs:
+  test:
+    docker:
+      - image: cimg/python:3.11
+    
+    steps:
+      - checkout
+      
+      # 设置 R 环境
+      - run:
+          name: 安装 R
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends r-base=4.2.0* libcurl4-openssl-dev libssl-dev libxml2-dev
+      
+      # 安装 R 依赖项
+      - run:
+          name: 安装 R 依赖项
+          command: |
+            sudo R -e 'install.packages(c("shiny", "ggplot2", "dplyr", "readr", "markdown"), repos="https://cloud.r-project.org/")'
+      
+      # 安装 Python 依赖项
+      - run:
+          name: 安装 Python 依赖项
+          command: |
+            python -m pip install --upgrade pip
+            export R_HOME=$(R RHOME)
+            echo "export R_HOME=$R_HOME" >> $BASH_ENV
+            source $BASH_ENV
+            sudo apt-get install -y python3-dev
+            pip install -r requirements.txt
+      
+      # 测试应用程序启动
+      - run:
+          name: 测试应用程序启动
+          command: |
+            mkdir -p PKdata PKModelLibrary PKBaseModelFolder PKObjResultsFolder PKCovariatesFolder PKPEResultsFolder PKDrawingFolder PLModelFolder PLData
+            
+            # 添加测试数据和模型
+            echo "# 示例模型文件" > PKModelLibrary/example_model.R
+            
+            # 在后台启动 Flask 应用程序
+            python -c "from app import app; import threading; threading.Thread(target=lambda: app.run(debug=False, host='0.0.0.0')).start()" &
+            APP_PID=$!
+            
+            # 等待应用程序启动
+            sleep 3
+            
+            # 测试应用程序响应
+            RESPONSE=$(curl --retry 10 --retry-delay 1 --retry-connrefused --max-time 5 -s -o /dev/null -w "%{http_code}" http://localhost:5000/)
+            echo "收到HTTP响应码: $RESPONSE"
+            
+            # 终止 Flask 进程
+            if ps -p $APP_PID > /dev/null; then
+              echo "终止Flask进程 PID: $APP_PID"
+              kill $APP_PID
+            fi
+            pkill -f "python -c.*app.run" || true
+            
+            # 检查响应码
+            if [ "$RESPONSE" = "200" ] || [ "$RESPONSE" = "302" ]; then
+              echo "应用程序启动成功，状态码: $RESPONSE"
+            else
+              echo "应用程序测试失败，状态码: $RESPONSE"
+              exit 1
+            fi
+
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      - test:
+          filters:
+            branches:
+              only:
+                - main
+                - master
