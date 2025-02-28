@@ -63,18 +63,16 @@ def upload_data():
             # 确保PKdata目录存在
             os.makedirs('PKdata', exist_ok=True)
             
-            # 保存处理后的数据为CSV文件到PKdata文件夹
+            # 保存处理后的数据为CSV文件
             pk_csv_path = os.path.join('PKdata', filename)
             df.to_csv(pk_csv_path, index=False)
             
+            # 保存处理后的数据为RDS文件
             from rpy2.robjects.conversion import localconverter
-            
             with localconverter(robjects.default_converter + pandas2ri.converter):
                 r_df = robjects.conversion.py2rpy(df)
                 output_filename = os.path.splitext(filename)[0] + ".rds"
                 output_path = os.path.join('PKdata', output_filename)
-                
-                # 在同一个转换上下文中调用 R 函数
                 saveRDS = robjects.r['saveRDS']
                 saveRDS(r_df, output_path)
             

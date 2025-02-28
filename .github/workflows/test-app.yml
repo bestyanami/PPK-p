@@ -24,16 +24,20 @@ jobs:
       with:
         r-version: '4.4.2'
     
-    # 缓存apt包
     - name: Cache apt packages
       uses: actions/cache@v3
       with:
-        path: /var/cache/apt/archives
+        path: ~/.apt-cache
         key: ${{ runner.os }}-apt-${{ hashFiles('**/test-app.yml') }}
         restore-keys: |
           ${{ runner.os }}-apt-
     
-    # 缓存R包
+    - name: Configure APT caching
+      run: |
+        mkdir -p ~/.apt-cache/archives/partial
+        sudo rm -rf /var/cache/apt/archives
+        sudo ln -s ~/.apt-cache/archives /var/cache/apt/archives
+    
     - name: Cache R packages
       uses: actions/cache@v3
       with:

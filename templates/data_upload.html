@@ -115,9 +115,38 @@
                 if (response.status === 'success') {
                     let listHtml = '';
                     if (response.files.length > 0) {
+                        // 创建一个对象来存储文件名和它们的扩展名
+                        const fileGroups = {};
+
+                        // 对文件按照基本名称进行分组
                         response.files.forEach(file => {
-                            listHtml += `<li class="list-group-item">${file}</li>`;
+                            const parts = file.split('.');
+                            const ext = parts.pop().toLowerCase(); // 获取扩展名并转换为小写
+                            const baseName = parts.join('.'); // 获取不带扩展名的文件名
+
+                            if (!fileGroups[baseName]) {
+                                fileGroups[baseName] = [];
+                            }
+                            fileGroups[baseName].push(ext);
                         });
+
+                        // 生成显示内容
+                        for (const baseName in fileGroups) {
+                            const exts = fileGroups[baseName];
+                            const hasCsv = exts.includes('csv');
+                            const hasRds = exts.includes('rds');
+
+                            if (hasCsv && hasRds) {
+                                // 文件配对完整
+                                listHtml += `<li class="list-group-item">${baseName}[.csv/.rds]</li>`;
+                            } else {
+                                // 文件配对不完整，标红并提示
+                                const missingExt = !hasCsv ? '.csv' : '.rds';
+                                listHtml += `<li class="list-group-item text-danger">${baseName}[${exts.map(e => '.' + e).join('/')}] 
+                                    <span class="badge bg-danger">不完整</span>
+                                    <small class="d-block mt-1">缺少${missingExt}文件，请重新上传</small></li>`;
+                            }
+                        }
                     } else {
                         listHtml = '<li class="list-group-item text-muted">暂无上传文件</li>';
                     }
