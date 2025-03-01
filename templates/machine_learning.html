@@ -1,0 +1,500 @@
+{% extends "base.html" %}
+
+{% block title %}机器学习分析 - Shiny-PopPK{% endblock %}
+
+{% block page_title %}机器学习分析{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- 左侧控制面板 -->
+    <div class="col-lg-5">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title">模型训练</h3>
+            </div>
+            <div class="card-body">
+                <form id="trainingForm">
+                    <!-- 数据选择 -->
+                    <div class="mb-3">
+                        <label for="selected_data" class="form-label">选择数据集</label>
+                        <select class="form-select" id="selected_data" name="selected_data">
+                            <!-- 数据集列表将通过JavaScript动态填充 -->
+                        </select>
+                        <div class="form-text">从PKdata目录选择CSV数据文件</div>
+                    </div>
+
+                    <!-- 模型类型选择 -->
+                    <div class="mb-3">
+                        <label for="model_type" class="form-label">选择模型类型</label>
+                        <select class="form-select" id="model_type" name="model_type">
+                            <option value="random_forest" selected>随机森林</option>
+                            <!-- 未来可添加更多模型类型 -->
+                        </select>
+                    </div>
+
+                    <!-- 目标变量选择 -->
+                    <div class="mb-3">
+                        <label for="target_column" class="form-label">选择目标变量</label>
+                        <select class="form-select" id="target_column" name="target_column">
+                            <!-- 目标列将通过JavaScript动态填充 -->
+                        </select>
+                        <div class="form-text">选择需要预测的目标列</div>
+                    </div>
+
+                    <!-- 测试集比例设置 -->
+                    <div class="mb-3">
+                        <label for="test_size" class="form-label">测试集比例</label>
+                        <input type="range" class="form-range" id="test_size" name="test_size" min="0.1" max="0.5"
+                            step="0.05" value="0.2" oninput="testSizeOutput.value = test_size.value">
+                        <output id="testSizeOutput">0.2</output>
+                        <div class="form-text">用于测试的数据比例</div>
+                    </div>
+
+                    <div class="text-center">
+                        <button type="button" id="train_model_button" class="btn btn-primary">训练模型</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 模型预测区域 -->
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h3 class="card-title">使用模型预测</h3>
+            </div>
+            <div class="card-body">
+                <form id="predictionForm">
+                    <div class="mb-3">
+                        <label for="model_name" class="form-label">选择模型</label>
+                        <select class="form-select" id="model_name" name="model_name">
+                            <!-- 模型列表将通过JavaScript动态填充 -->
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="input_data" class="form-label">预测数据</label>
+                        <select class="form-select" id="input_data" name="input_data">
+                            <!-- 数据集列表将通过JavaScript动态填充 -->
+                        </select>
+                        <div class="form-text">选择用于预测的数据文件</div>
+                    </div>
+
+                    <div class="text-center">
+                        <button type="button" id="predict_button" class="btn btn-success">执行预测</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧结果面板 -->
+    <div class="col-lg-7">
+        <!-- 训练结果卡片 -->
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h3 class="card-title">模型训练结果</h3>
+            </div>
+            <div class="card-body">
+                <div id="training_status" class="alert alert-light" role="alert">
+                    选择数据集和目标变量，然后点击"训练模型"按钮...
+                </div>
+
+                <!-- 模型评估指标 -->
+                <div id="metrics_container" class="mt-3 d-none">
+                    <h5>模型评估指标</h5>
+                    <table id="metrics_table" class="table table-bordered table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>指标</th>
+                                <th>值</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 评估指标将通过JavaScript动态填充 -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- ID列过拟合（第一重要）警告 -->
+                <div id="id_warning_container" class="mt-3 d-none">
+                    <div class="alert alert-warning" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <span id="id_warning_text"></span>
+                    </div>
+                </div>
+
+                <!-- 特征重要性表格 -->
+                <div id="feature_importance_container" class="mt-3 d-none">
+                    <h5>特征重要性</h5>
+                    <table id="feature_importance_table" class="table table-bordered table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>特征</th>
+                                <th>重要性</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 特征重要性将通过JavaScript动态填充 -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 可视化区域 -->
+                <div id="plots_container" class="mt-4 d-none">
+                    <h5>预测 vs 实际值</h5>
+                    <div id="prediction_plot" class="text-center">
+                        <!-- 预测散点图将通过JavaScript动态填充 -->
+                    </div>
+
+                    <h5 class="mt-4">特征重要性</h5>
+                    <div id="importance_plot" class="text-center">
+                        <!-- 特征重要性图将通过JavaScript动态填充 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 预测结果卡片 -->
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                <h3 class="card-title">预测结果</h3>
+            </div>
+            <div class="card-body">
+                <div id="prediction_status" class="alert alert-light" role="alert">
+                    选择模型和预测数据，然后点击"执行预测"按钮...
+                </div>
+
+                <div id="prediction_results_container" class="mt-3 d-none">
+                    <h5>预览结果</h5>
+                    <div class="table-responsive">
+                        <table id="prediction_results_table" class="table table-bordered table-hover">
+                            <thead id="prediction_results_header" class="table-light">
+                                <!-- 表头将通过JavaScript动态填充 -->
+                            </thead>
+                            <tbody id="prediction_results_body">
+                                <!-- 预测结果将通过JavaScript动态填充 -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        <a id="download_results_link" href="#" class="btn btn-sm btn-outline-primary d-none">
+                            下载完整结果
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function () {
+        // 页面加载时获取数据集列表和模型列表
+        loadDataList();
+        loadModelList();
+
+        // 数据集选择改变时获取列名
+        $('#selected_data').change(function () {
+            loadColumns();
+        });
+
+        // 训练模型按钮点击事件
+        $('#train_model_button').click(function () {
+            const formData = new FormData($('#trainingForm')[0]);
+
+            const selectedData = $('#selected_data').val();
+            const targetColumn = $('#target_column').val();
+
+            if (!selectedData) {
+                $('#training_status').removeClass('alert-light alert-success').addClass('alert-danger');
+                $('#training_status').text('请选择数据集');
+                return;
+            }
+
+            if (!targetColumn) {
+                $('#training_status').removeClass('alert-light alert-success').addClass('alert-danger');
+                $('#training_status').text('请选择目标变量');
+                return;
+            }
+
+            $('#training_status').removeClass('alert-light alert-danger').addClass('alert-info');
+            $('#training_status').text('模型训练中，请稍候...');
+            $('#metrics_container').addClass('d-none');
+            $('#feature_importance_container').addClass('d-none');
+            $('#plots_container').addClass('d-none');
+
+            $.ajax({
+                url: '{{ url_for("machine_learning.train_model") }}',
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (response) {
+                    if (response.status === 'success') {
+                        $('#training_status').removeClass('alert-info alert-danger').addClass('alert-success');
+                        $('#training_status').text('模型训练成功! 模型名称: ' + response.model_name);
+                        // 显示ID列警告（如果存在）
+                        if (response.results.id_warning) {
+                            $('#id_warning_text').html(response.results.id_warning);
+                            $('#id_warning_container').removeClass('d-none');
+                        } else {
+                            $('#id_warning_container').addClass('d-none');
+                        }
+
+                        // 显示模型指标
+                        displayModelMetrics(response.results.metrics);
+
+                        // 显示特征重要性
+                        displayFeatureImportance(response.results.feature_importance);
+
+                        // 显示图表
+                        displayPlots(response.results.plots);
+
+                        // 刷新模型列表
+                        loadModelList();
+
+                    } else {
+                        $('#training_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                        $('#training_status').text('训练失败: ' + response.message);
+                    }
+                },
+                error: function () {
+                    $('#training_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                    $('#training_status').text('训练失败: 服务器错误');
+                }
+            });
+        });
+
+        // 预测按钮点击事件
+        $('#predict_button').click(function () {
+            const modelName = $('#model_name').val();
+            const inputData = $('#input_data').val();
+
+            if (!modelName) {
+                $('#prediction_status').removeClass('alert-light alert-success').addClass('alert-danger');
+                $('#prediction_status').text('请选择模型');
+                return;
+            }
+
+            if (!inputData) {
+                $('#prediction_status').removeClass('alert-light alert-success').addClass('alert-danger');
+                $('#prediction_status').text('请选择预测数据');
+                return;
+            }
+
+            $('#prediction_status').removeClass('alert-light alert-danger').addClass('alert-info');
+            $('#prediction_status').text('执行预测中，请稍候...');
+            $('#prediction_results_container').addClass('d-none');
+
+            $.ajax({
+                url: '{{ url_for("machine_learning.predict") }}',
+                type: 'POST',
+                data: {
+                    'model_name': modelName,
+                    'input_data': inputData
+                },
+                success: function (response) {
+                    if (response.status === 'success') {
+                        $('#prediction_status').removeClass('alert-info alert-danger').addClass('alert-success');
+                        $('#prediction_status').text('预测完成! 结果已保存为: ' + response.result_file);
+
+                        // 显示预测结果
+                        displayPredictionResults(response.data_preview);
+
+                        // 设置下载链接
+                        $('#download_results_link')
+                            .attr('href', '/machine_learning/download_result?file=' + response.result_file)
+                            .removeClass('d-none');
+
+                    } else {
+                        $('#prediction_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                        $('#prediction_status').text('预测失败: ' + response.message);
+                    }
+                },
+                error: function () {
+                    $('#prediction_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                    $('#prediction_status').text('预测失败: 服务器错误');
+                }
+            });
+        });
+    });
+
+    // 加载数据集列表
+    function loadDataList() {
+        $.ajax({
+            url: '{{ url_for("machine_learning.data_list") }}',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'success') {
+                    let options = '';
+                    response.data_files.forEach(file => {
+                        options += `<option value="${file}">${file}</option>`;
+                    });
+                    $('#selected_data').html(options);
+                    $('#input_data').html(options);
+
+                    // 如果有数据集，加载第一个数据集的列
+                    if (response.data_files.length > 0) {
+                        loadColumns();
+                    }
+                } else {
+                    console.error('获取数据集列表失败:', response.message);
+                }
+            },
+            error: function () {
+                console.error('获取数据集列表失败: 服务器错误');
+            }
+        });
+    }
+
+    // 加载模型列表
+    function loadModelList() {
+        $.ajax({
+            url: '{{ url_for("machine_learning.model_list") }}',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'success') {
+                    let options = '';
+                    response.models.forEach(model => {
+                        options += `<option value="${model}">${model}</option>`;
+                    });
+                    $('#model_name').html(options);
+                } else {
+                    console.error('获取模型列表失败:', response.message);
+                }
+            },
+            error: function () {
+                console.error('获取模型列表失败: 服务器错误');
+            }
+        });
+    }
+
+    // 加载数据集列名
+    function loadColumns() {
+        const selectedData = $('#selected_data').val();
+        if (!selectedData) return;
+
+        // 这里需要添加一个API端点来获取数据集的列名
+        // 暂时使用模拟数据
+        $.ajax({
+            url: '/data_exploration/load_data',
+            type: 'GET',
+            data: {
+                file_name: selectedData
+            },
+            success: function (response) {
+                if (response.status === 'success') {
+                    const columns = response.data.columns;
+                    let options = '';
+                    columns.forEach(column => {
+                        options += `<option value="${column}">${column}</option>`;
+                    });
+                    $('#target_column').html(options);
+                } else {
+                    console.error('获取数据列失败:', response.message);
+                }
+            },
+            error: function () {
+                console.error('获取数据列失败: 服务器错误');
+            }
+        });
+    }
+
+    // 显示模型评估指标
+    function displayModelMetrics(metrics) {
+        let metricsHtml = '';
+        for (const [key, value] of Object.entries(metrics)) {
+            let metricName = key;
+            // 美化指标名称
+            switch (key) {
+                case 'train_r2': metricName = '训练集 R²'; break;
+                case 'test_r2': metricName = '测试集 R²'; break;
+                case 'train_rmse': metricName = '训练集 RMSE'; break;
+                case 'test_rmse': metricName = '测试集 RMSE'; break;
+                case 'cv_r2_mean': metricName = '交叉验证 R² (均值)'; break;
+                case 'cv_r2_std': metricName = '交叉验证 R² (标准差)'; break;
+            }
+
+            metricsHtml += `
+                <tr>
+                    <td>${metricName}</td>
+                    <td>${value}</td>
+                </tr>
+            `;
+        }
+        $('#metrics_table tbody').html(metricsHtml);
+        $('#metrics_container').removeClass('d-none');
+    }
+
+    // 显示特征重要性
+    function displayFeatureImportance(featureImportance) {
+        // 将特征重要性转换为数组并排序
+        const importanceArray = Object.entries(featureImportance)
+            .map(([feature, importance]) => ({ feature, importance }))
+            .sort((a, b) => b.importance - a.importance);
+
+        let importanceHtml = '';
+        importanceArray.forEach(item => {
+            importanceHtml += `
+                <tr>
+                    <td>${item.feature}</td>
+                    <td>${item.importance.toFixed(4)}</td>
+                </tr>
+            `;
+        });
+
+        $('#feature_importance_table tbody').html(importanceHtml);
+        $('#feature_importance_container').removeClass('d-none');
+    }
+
+    // 显示图表
+    function displayPlots(plots) {
+        // 显示预测散点图
+        if (plots.prediction_scatter) {
+            $('#prediction_plot').html(`<img src="data:image/png;base64,${plots.prediction_scatter}" 
+                                        class="img-fluid" alt="预测值 vs 实际值">`);
+        }
+
+        // 显示特征重要性图
+        if (plots.importance_plot) {
+            $('#importance_plot').html(`<img src="data:image/png;base64,${plots.importance_plot}" 
+                                        class="img-fluid" alt="特征重要性">`);
+        }
+
+        $('#plots_container').removeClass('d-none');
+    }
+
+    // 显示预测结果
+    function displayPredictionResults(results) {
+        if (!results || results.length === 0) {
+            $('#prediction_results_container').addClass('d-none');
+            return;
+        }
+
+        // 生成表头
+        let headerHtml = '<tr>';
+        const columns = Object.keys(results[0]);
+        columns.forEach(column => {
+            headerHtml += `<th>${column}</th>`;
+        });
+        headerHtml += '</tr>';
+        $('#prediction_results_header').html(headerHtml);
+
+        // 生成结果行
+        let bodyHtml = '';
+        results.forEach(row => {
+            let rowHtml = '<tr>';
+            columns.forEach(column => {
+                rowHtml += `<td>${row[column] !== null ? row[column] : 'N/A'}</td>`;
+            });
+            rowHtml += '</tr>';
+            bodyHtml += rowHtml;
+        });
+        $('#prediction_results_body').html(bodyHtml);
+
+        $('#prediction_results_container').removeClass('d-none');
+    }
+</script>
+{% endblock %}

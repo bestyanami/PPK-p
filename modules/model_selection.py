@@ -36,7 +36,7 @@ def data_list():
         if not os.path.exists('PKdata'):
             os.makedirs('PKdata')
         
-        files = [f for f in os.listdir('PKdata') if f.endswith('.rds') or f.endswith('.csv')]
+        files = [f for f in os.listdir('PKdata') if f.endswith('.rds')]
         return jsonify({'status': 'success', 'data_files': files})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})

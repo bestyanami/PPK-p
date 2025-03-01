@@ -33,8 +33,6 @@ ui <- fluidPage(
                         )
                 ),
                 dashboardBody(
-                        # 引入自定义 CSS 样式
-                        includeCSS("www/style.css"),
                         tabItems(
                                 # 主界面内容
                                 tabItem(

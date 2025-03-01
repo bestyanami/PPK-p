@@ -24,6 +24,7 @@ from modules.covariant_screening import covariant_screening_bp
 from modules.parameter_evaluation import parameter_evaluation_bp
 from modules.model_diagnosis import model_diagnosis_bp
 from modules.dose_recommendation import dose_recommendation_bp
+from modules.machine_learning import machine_learning_bp
 
 # 初始化应用
 app = Flask(__name__)
@@ -31,11 +32,13 @@ app.secret_key = secrets.token_hex(16)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB 上传限制
+app.config['TEMPLATES_AUTO_RELOAD'] = True  # 启用模板自动重载
+app.config['USE_RELOADER'] = True  # 显式启用重载器
 
 # 初始化 flask-login
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login'
+login_manager.login_view = 'login' # type: ignore
 
 # 创建必要的文件夹
 folders = [
@@ -65,6 +68,7 @@ app.register_blueprint(covariant_screening_bp)
 app.register_blueprint(parameter_evaluation_bp)
 app.register_blueprint(model_diagnosis_bp)
 app.register_blueprint(dose_recommendation_bp)
+app.register_blueprint(machine_learning_bp)
 
 @app.route('/')
 def index():
