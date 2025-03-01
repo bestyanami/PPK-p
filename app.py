@@ -25,6 +25,7 @@ from modules.parameter_evaluation import parameter_evaluation_bp
 from modules.model_diagnosis import model_diagnosis_bp
 from modules.dose_recommendation import dose_recommendation_bp
 from modules.machine_learning import machine_learning_bp
+from modules.federated_learning import federated_learning_bp
 
 # 初始化应用
 app = Flask(__name__)
@@ -69,6 +70,7 @@ app.register_blueprint(parameter_evaluation_bp)
 app.register_blueprint(model_diagnosis_bp)
 app.register_blueprint(dose_recommendation_bp)
 app.register_blueprint(machine_learning_bp)
+app.register_blueprint(federated_learning_bp)
 
 @app.route('/')
 def index():

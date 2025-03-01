@@ -379,7 +379,7 @@ def train_model_by_type(model_type, X_train, y_train, X_test, y_test):
                 'prediction_scatter': plot_image,
                 'importance_plot': importance_image
             },
-            'id_warning': id_warning  # 添加ID警告信息
+            'id_warning': id_warning
         }
         
     # 这里可以添加更多的模型类型

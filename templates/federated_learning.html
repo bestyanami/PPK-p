@@ -1,0 +1,491 @@
+{% extends "base.html" %}
+
+{% block title %}联邦学习分析 - Shiny-PopPK{% endblock %}
+
+{% block page_title %}联邦学习分析{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <h5><i class="fas fa-info-circle me-2"></i>关于联邦学习</h5>
+            <p>联邦学习允许多个数据源协同训练模型，同时保持数据隐私，无需共享原始数据。这种方法特别适合医疗数据分析。</p>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 左侧控制面板 -->
+    <div class="col-lg-5">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title">联邦学习设置</h3>
+            </div>
+            <div class="card-body">
+                <form id="federatedForm">
+                    <!-- 数据源选择 -->
+                    <div class="mb-3">
+                        <label class="form-label">选择联邦数据源</label>
+                        <div id="data_sources_container">
+                            <!-- 数据源选择将通过JavaScript动态填充 -->
+                            <div class="data-source-item mb-2">
+                                <div class="input-group">
+                                    <select class="form-select data-source-select" name="data_sources[]">
+                                        <!-- 选项将动态填充 -->
+                                    </select>
+                                    <button type="button" class="btn btn-outline-danger remove-data-source" disabled>
+                                        <i class="fas fa-minus"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" id="add_data_source" class="btn btn-sm btn-outline-primary mt-2">
+                            <i class="fas fa-plus me-1"></i>添加数据源
+                        </button>
+                        <div class="form-text">添加多个数据源模拟联邦学习环境</div>
+                    </div>
+
+                    <!-- 目标变量选择 -->
+                    <div class="mb-3">
+                        <label for="target_column" class="form-label">选择目标变量</label>
+                        <select class="form-select" id="target_column" name="target_column">
+                            <!-- 目标列将通过JavaScript动态填充 -->
+                        </select>
+                        <div class="form-text">选择需要预测的目标列</div>
+                    </div>
+
+                    <!-- 联邦学习参数 -->
+                    <div class="mb-3">
+                        <label for="num_rounds" class="form-label">联邦学习轮数</label>
+                        <input type="number" class="form-control" id="num_rounds" name="num_rounds" min="1" max="50"
+                            value="10">
+                        <div class="form-text">联邦学习的训练轮数</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="batch_size" class="form-label">批次大小</label>
+                        <input type="number" class="form-control" id="batch_size" name="batch_size" min="8" max="128"
+                            step="8" value="32">
+                        <div class="form-text">每个客户端的本地训练批次大小</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="local_epochs" class="form-label">本地训练轮数</label>
+                        <input type="number" class="form-control" id="local_epochs" name="local_epochs" min="1" max="10"
+                            value="1">
+                        <div class="form-text">每轮联邦学习中客户端的本地训练轮数</div>
+                    </div>
+
+                    <div class="text-center">
+                        <button type="button" id="run_federated_button" class="btn btn-primary">
+                            运行联邦学习
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 保存模型设置 -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h3 class="card-title">联邦模型保存</h3>
+            </div>
+            <div class="card-body">
+                <form id="saveModelForm">
+                    <div class="mb-3">
+                        <label for="model_name" class="form-label">模型名称</label>
+                        <input type="text" class="form-control" id="model_name" name="model_name"
+                            placeholder="federated_model_1" value="">
+                    </div>
+
+                    <div class="text-center">
+                        <button type="button" id="save_model_button" class="btn btn-success" disabled>
+                            保存模型
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧结果面板 -->
+    <div class="col-lg-7">
+        <!-- 训练过程卡片 -->
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h3 class="card-title">联邦学习进度</h3>
+            </div>
+            <div class="card-body">
+                <div id="federated_status" class="alert alert-light" role="alert">
+                    选择数据源和目标变量，然后点击"运行联邦学习"按钮...
+                </div>
+
+                <div class="progress mb-3 d-none" id="progress_container">
+                    <div id="progress_bar" class="progress-bar progress-bar-striped progress-bar-animated"
+                        role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%
+                    </div>
+                </div>
+
+                <!-- 训练曲线 -->
+                <div id="training_curves_container" class="mt-4 d-none">
+                    <h5>训练曲线</h5>
+                    <div id="loss_plot" style="height: 300px"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 模型评估卡片 -->
+        <div class="card mb-4">
+            <div class="card-header bg-warning text-dark">
+                <h3 class="card-title">联邦模型评估</h3>
+            </div>
+            <div class="card-body">
+                <div id="evaluation_container" class="d-none">
+                    <!-- 模型指标表格 -->
+                    <div class="table-responsive mb-4">
+                        <table id="metrics_table" class="table table-bordered table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>数据源</th>
+                                    <th>MAE</th>
+                                    <th>RMSE</th>
+                                    <th>R²</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- 评估指标将通过JavaScript动态填充 -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 模型预测图 -->
+                    <div class="mt-4">
+                        <h5>全局模型预测</h5>
+                        <div id="prediction_plot" style="height: 300px"></div>
+                    </div>
+                </div>
+
+                <div id="no_evaluation_message" class="alert alert-secondary">
+                    运行联邦学习后将显示模型评估结果
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function () {
+        // 页面加载时获取数据集列表
+        loadDataList();
+
+        // 数据源选择改变时获取列名
+        $(document).on('change', '.data-source-select:first', function () {
+            loadColumns($(this).val());
+        });
+
+        // 添加数据源按钮点击事件
+        $('#add_data_source').click(function () {
+            const dataSourceItem = $('.data-source-item:first').clone();
+            dataSourceItem.find('.remove-data-source').prop('disabled', false);
+            $('#data_sources_container').append(dataSourceItem);
+            updateRemoveButtons();
+        });
+
+        // 删除数据源按钮点击事件
+        $(document).on('click', '.remove-data-source', function () {
+            $(this).closest('.data-source-item').remove();
+            updateRemoveButtons();
+        });
+
+        // 运行联邦学习按钮点击事件
+        $('#run_federated_button').click(function () {
+            const dataSources = [];
+            $('.data-source-select').each(function () {
+                dataSources.push($(this).val());
+            });
+
+            const targetColumn = $('#target_column').val();
+            const numRounds = $('#num_rounds').val();
+            const batchSize = $('#batch_size').val();
+            const localEpochs = $('#local_epochs').val();
+
+            if (dataSources.length === 0 || !dataSources[0]) {
+                $('#federated_status').removeClass('alert-light alert-success').addClass('alert-danger');
+                $('#federated_status').text('请至少选择一个数据源');
+                return;
+            }
+
+            if (!targetColumn) {
+                $('#federated_status').removeClass('alert-light alert-success').addClass('alert-danger');
+                $('#federated_status').text('请选择目标变量');
+                return;
+            }
+
+            $('#federated_status').removeClass('alert-light alert-danger').addClass('alert-info');
+            $('#federated_status').text('正在初始化联邦学习环境，这可能需要一些时间...');
+
+            $('#progress_container').removeClass('d-none');
+            $('#progress_bar').css('width', '0%').attr('aria-valuenow', 0).text('0%');
+
+            // 模拟进度更新
+            startProgressSimulation();
+
+            // 发送请求到服务器
+            $.ajax({
+                url: '{{ url_for("federated_learning.run_federated") }}',
+                type: 'POST',
+                data: {
+                    'data_sources': dataSources,
+                    'target_column': targetColumn,
+                    'num_rounds': numRounds,
+                    'batch_size': batchSize,
+                    'local_epochs': localEpochs
+                },
+                success: function (response) {
+                    stopProgressSimulation();
+
+                    if (response.status === 'success') {
+                        $('#federated_status').removeClass('alert-info alert-danger').addClass('alert-success');
+                        $('#federated_status').text('联邦学习完成！');
+
+                        $('#progress_bar').css('width', '100%').attr('aria-valuenow', 100).text('100%');
+
+                        // 显示训练曲线
+                        displayTrainingCurves(response.training_history);
+
+                        // 显示评估结果
+                        displayEvaluationResults(response.evaluation);
+
+                        // 启用保存模型按钮
+                        $('#save_model_button').prop('disabled', false);
+
+                    } else {
+                        $('#federated_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                        $('#federated_status').text('联邦学习失败: ' + response.message);
+                        $('#progress_container').addClass('d-none');
+                    }
+                },
+                error: function () {
+                    stopProgressSimulation();
+                    $('#federated_status').removeClass('alert-info alert-success').addClass('alert-danger');
+                    $('#federated_status').text('联邦学习失败: 服务器错误');
+                    $('#progress_container').addClass('d-none');
+                }
+            });
+        });
+
+        // 保存模型按钮点击事件
+        $('#save_model_button').click(function () {
+            const modelName = $('#model_name').val();
+
+            if (!modelName) {
+                alert('请输入模型名称');
+                return;
+            }
+
+            $.ajax({
+                url: '{{ url_for("federated_learning.save_federated_model") }}',
+                type: 'POST',
+                data: {
+                    'model_name': modelName
+                },
+                success: function (response) {
+                    if (response.status === 'success') {
+                        alert('模型保存成功！');
+                    } else {
+                        alert('模型保存失败: ' + response.message);
+                    }
+                },
+                error: function () {
+                    alert('模型保存失败: 服务器错误');
+                }
+            });
+        });
+    });
+
+    // 更新删除按钮状态
+    function updateRemoveButtons() {
+        // 如果只有一个数据源，禁用其删除按钮
+        if ($('.data-source-item').length === 1) {
+            $('.remove-data-source').prop('disabled', true);
+        } else {
+            $('.remove-data-source').prop('disabled', false);
+        }
+    }
+
+    // 加载数据集列表
+    function loadDataList() {
+        $.ajax({
+            url: '{{ url_for("federated_learning.data_list") }}',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'success') {
+                    let options = '';
+                    response.data_files.forEach(file => {
+                        options += `<option value="${file}">${file}</option>`;
+                    });
+                    $('.data-source-select').html(options);
+
+                    // 加载第一个数据源的列
+                    if (response.data_files.length > 0) {
+                        loadColumns(response.data_files[0]);
+                    }
+                } else {
+                    console.error('获取数据集列表失败:', response.message);
+                }
+            },
+            error: function () {
+                console.error('获取数据集列表失败: 服务器错误');
+            }
+        });
+    }
+
+    // 加载数据集列名
+    function loadColumns(fileName) {
+        if (!fileName) return;
+
+        $.ajax({
+            url: '/data_exploration/load_data',
+            type: 'GET',
+            data: {
+                file_name: fileName
+            },
+            success: function (response) {
+                if (response.status === 'success') {
+                    const columns = response.data.columns;
+                    let options = '';
+                    columns.forEach(column => {
+                        options += `<option value="${column}">${column}</option>`;
+                    });
+                    $('#target_column').html(options);
+                } else {
+                    console.error('获取数据列失败:', response.message);
+                }
+            },
+            error: function () {
+                console.error('获取数据列失败: 服务器错误');
+            }
+        });
+    }
+
+    let progressInterval;
+
+    // 启动进度条模拟
+    function startProgressSimulation() {
+        let progress = 0;
+        progressInterval = setInterval(function () {
+            // 缓慢增加进度，但不超过95%（保留给实际完成时的100%）
+            progress += Math.random() * 3;
+            progress = Math.min(progress, 95);
+
+            $('#progress_bar').css('width', progress + '%').attr('aria-valuenow', progress).text(Math.round(progress) + '%');
+        }, 1000);
+    }
+
+    // 停止进度条模拟
+    function stopProgressSimulation() {
+        clearInterval(progressInterval);
+    }
+
+    // 显示训练曲线
+    function displayTrainingCurves(history) {
+        if (!history) return;
+
+        const rounds = history.rounds;
+        const losses = history.loss;
+
+        const trace = {
+            x: rounds,
+            y: losses,
+            mode: 'lines+markers',
+            type: 'scatter',
+            name: '联邦学习损失',
+            line: {
+                color: 'rgb(55, 128, 191)',
+                width: 2
+            }
+        };
+
+        const layout = {
+            title: '联邦学习训练损失',
+            xaxis: {
+                title: '轮数'
+            },
+            yaxis: {
+                title: '损失值'
+            }
+        };
+
+        Plotly.newPlot('loss_plot', [trace], layout);
+        $('#training_curves_container').removeClass('d-none');
+    }
+
+    // 显示评估结果
+    function displayEvaluationResults(evaluation) {
+        if (!evaluation) return;
+
+        // 填充指标表格
+        let tableHtml = '';
+        evaluation.metrics.forEach(metric => {
+            tableHtml += `
+                <tr>
+                    <td>${metric.source}</td>
+                    <td>${metric.mae.toFixed(4)}</td>
+                    <td>${metric.rmse.toFixed(4)}</td>
+                    <td>${metric.r2.toFixed(4)}</td>
+                </tr>
+            `;
+        });
+        $('#metrics_table tbody').html(tableHtml);
+
+        // 绘制预测图
+        if (evaluation.predictions) {
+            const trace = {
+                x: evaluation.predictions.actual,
+                y: evaluation.predictions.predicted,
+                mode: 'markers',
+                type: 'scatter',
+                name: '预测 vs 实际',
+                marker: {
+                    color: 'rgb(55, 128, 191)',
+                    size: 8
+                }
+            };
+
+            // 添加理想线
+            const minVal = Math.min(...evaluation.predictions.actual);
+            const maxVal = Math.max(...evaluation.predictions.actual);
+
+            const idealLine = {
+                x: [minVal, maxVal],
+                y: [minVal, maxVal],
+                mode: 'lines',
+                type: 'scatter',
+                name: '理想线',
+                line: {
+                    color: 'rgb(219, 64, 82)',
+                    width: 2,
+                    dash: 'dash'
+                }
+            };
+
+            const layout = {
+                title: '联邦模型预测 vs 实际',
+                xaxis: {
+                    title: '实际值'
+                },
+                yaxis: {
+                    title: '预测值'
+                }
+            };
+
+            Plotly.newPlot('prediction_plot', [trace, idealLine], layout);
+        }
+
+        $('#evaluation_container').removeClass('d-none');
+        $('#no_evaluation_message').addClass('d-none');
+    }
+</script>
+{% endblock %}
