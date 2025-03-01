@@ -85,11 +85,16 @@ def login():
         password = request.form.get('password')
         
         # 简单认证 - 生产环境中应使用更安全的方法
-        if username == "a" and password == "a":  # 与原代码保持一致的简单认证
+        if username == "a" and password == "a":
             user = User("admin")
             login_user(user, remember=True)
             session.permanent = True
-            return redirect(url_for('index'))
+            
+            next_page = request.args.get('next')
+            if next_page and next_page.startswith('/'):  # 确保URL是相对路径，防止重定向攻击
+                return redirect(next_page)
+            else:
+                return redirect(url_for('index'))
         else:
             flash('用户名或密码错误！')
     
