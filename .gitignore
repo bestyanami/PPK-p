@@ -4,6 +4,7 @@ docs/
 PKdata/*
 FL_Models/*
 ML_Models/*
+.$*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

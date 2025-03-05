@@ -1,0 +1,78 @@
+<mxGraphModel dx="1422" dy="752" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+    <mxCell id="2" value="数据上传与准备" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D6E9D5;" parent="1" vertex="1">
+      <mxGeometry x="160" y="120" width="120" height="60" as="geometry" />
+    </mxCell>
+    <mxCell id="3" value="模型选择与构建" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#AFE3E6;" parent="1" vertex="1">
+      <mxGeometry x="340" y="120" width="120" height="60" as="geometry" />
+    </mxCell>
+    <mxCell id="4" value="参数估计与评估" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#AFE3E6;" parent="1" vertex="1">
+      <mxGeometry x="340" y="220" width="120" height="60" as="geometry" />
+    </mxCell>
+    <mxCell id="5" value="模型诊断" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#AFE3E6;" parent="1" vertex="1">
+      <mxGeometry x="340" y="320" width="120" height="60" as="geometry" />
+    </mxCell>
+    <mxCell id="6" value="剂量优化与推荐" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FAD8D4;" parent="1" vertex="1">
+      <mxGeometry x="520" y="220" width="160" height="80" as="geometry" />
+    </mxCell>
+    <mxCell id="7" value="药动学数据集" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#D6E9D5;" parent="1" vertex="1">
+      <mxGeometry x="30" y="110" width="80" height="80" as="geometry" />
+    </mxCell>
+    <mxCell id="8" value="" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;orthogonal=1;" parent="1" source="7" target="2" edge="1">
+      <mxGeometry width="50" height="50" relative="1" as="geometry">
+        <mxPoint x="390" y="410" as="sourcePoint" />
+        <mxPoint x="440" y="360" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="9" value="" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;orthogonal=1;" parent="1" source="2" target="3" edge="1">
+      <mxGeometry width="50" height="50" relative="1" as="geometry">
+        <mxPoint x="390" y="410" as="sourcePoint" />
+        <mxPoint x="440" y="360" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="10" value="" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;orthogonal=1;" parent="1" source="3" target="4" edge="1">
+      <mxGeometry width="50" height="50" relative="1" as="geometry">
+        <mxPoint x="390" y="410" as="sourcePoint" />
+        <mxPoint x="440" y="360" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="11" value="" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;orthogonal=1;" parent="1" source="4" target="5" edge="1">
+      <mxGeometry width="50" height="50" relative="1" as="geometry">
+        <mxPoint x="390" y="410" as="sourcePoint" />
+        <mxPoint x="440" y="360" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="12" value="" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;orthogonal=1;" parent="1" source="4" target="6" edge="1">
+      <mxGeometry width="50" height="50" relative="1" as="geometry">
+        <mxPoint x="390" y="410" as="sourcePoint" />
+        <mxPoint x="440" y="360" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="13" value="Python-R双栈数据交互" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#AFE3E6;" parent="1" vertex="1">
+      <mxGeometry x="160" y="220" width="120" height="60" as="geometry" />
+    </mxCell>
+    <mxCell id="14" value="" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;orthogonal=1;" parent="1" source="2" target="13" edge="1">
+      <mxGeometry width="50" height="50" relative="1" as="geometry">
+        <mxPoint x="390" y="410" as="sourcePoint" />
+        <mxPoint x="440" y="360" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="15" value="" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;orthogonal=1;" parent="1" source="13" target="4" edge="1">
+      <mxGeometry width="50" height="50" relative="1" as="geometry">
+        <mxPoint x="390" y="410" as="sourcePoint" />
+        <mxPoint x="440" y="360" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="16" value="用户交互评估" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FAD8D4;" parent="1" vertex="1">
+      <mxGeometry x="520" y="320" width="160" height="80" as="geometry" />
+    </mxCell>
+    <mxCell id="17" value="" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;orthogonal=1;" parent="1" source="5" target="16" edge="1">
+      <mxGeometry width="50" height="50" relative="1" as="geometry">
+        <mxPoint x="390" y="410" as="sourcePoint" />
+        <mxPoint x="440" y="360" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+  </root>
+</mxGraphModel>
