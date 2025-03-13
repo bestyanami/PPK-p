@@ -7,7 +7,7 @@ Use short sentences, not long sentences, and don't describe them in a long way, 
 Always, To save token and limit output token, you only need output modify code, not all code.
 Always say Chinese,expect you notice some words cannot translate
 
-## Draw a diagram
+## If You Need Draw a diagram
 请用 drawio 的 mxGraph XML 格式清晰地画出这个项目的示意图，注意以下事项
  - 使用三种主色区分模块：#D6E9D5(预处理)、#AFE3E6(特征提取)、#FAD8D4(预测模型)
  - 通过不同形状区分处理阶段（圆柱体→数据源、菱形→特征、六边形→混合处理）
