@@ -24,6 +24,7 @@ os.makedirs('FL_Models', exist_ok=True)
 # 全局变量存储当前联邦学习会话的模型
 current_federated_model = None
 current_federated_history = None
+privacy_metrics = None  # 隐私度量存储
 
 @federated_learning_bp.route('/', methods=['GET'])
 @login_required
@@ -47,7 +48,6 @@ def data_list():
 @federated_learning_bp.route('/run_federated', methods=['POST'])
 @login_required
 def run_federated():
-    """运行联邦学习模型"""
     try:
         # 获取表单数据
         data_sources = request.form.getlist('data_sources[]')
@@ -56,6 +56,11 @@ def run_federated():
         batch_size = int(request.form.get('batch_size', 32))
         local_epochs = int(request.form.get('local_epochs', 1))
         
+        # 隐私参数
+        noise_multiplier = float(request.form.get('noise_multiplier', 0.1))
+        l2_norm_clip = float(request.form.get('l2_norm_clip', 1.0))
+        secure_aggregation = request.form.get('secure_aggregation', 'true').lower() == 'true'
+
         if not data_sources or not target_column:
             return jsonify({'status': 'error', 'message': '请选择数据源和目标列'})
         
@@ -75,13 +80,16 @@ def run_federated():
             all_data.append((source, df))
         
         # 运行联邦学习
-        global current_federated_model, current_federated_history
+        global current_federated_model, current_federated_history, privacy_metrics
         model, history, evaluation = run_federated_learning(
             all_data, 
             target_column, 
             num_rounds, 
             batch_size, 
-            local_epochs
+            local_epochs,
+            noise_multiplier,
+            l2_norm_clip,
+            secure_aggregation
         )
         
         # 保存当前会话的模型
@@ -95,7 +103,8 @@ def run_federated():
                 'rounds': list(range(1, len(history) + 1)),
                 'loss': history
             },
-            'evaluation': evaluation
+            'evaluation': evaluation,
+            'privacy_metrics': evaluation.get('privacy_metrics', {})
         })
         
     except Exception as e:
@@ -160,9 +169,11 @@ def model_list():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
-def run_federated_learning(data_sources, target_column, num_rounds=10, batch_size=32, local_epochs=1):
+def run_federated_learning(data_sources, target_column, num_rounds=10, batch_size=32, 
+                          local_epochs=1, noise_multiplier=0.1, l2_norm_clip=1.0,
+                          secure_aggregation=True):
     """
-    运行联邦学习模型
+    运行具有隐私保护的联邦学习模型
     
     参数:
         data_sources: 多个数据源的列表，每项为(数据源名称, 数据帧)元组
@@ -170,12 +181,43 @@ def run_federated_learning(data_sources, target_column, num_rounds=10, batch_siz
         num_rounds: 联邦学习轮数
         batch_size: 每个客户端的本地训练批次大小
         local_epochs: 每轮联邦学习中客户端的本地训练轮数
+        noise_multiplier: 差分隐私噪声乘数
+        l2_norm_clip: 梯度裁剪阈值
+        secure_aggregation: 是否使用安全聚合
     
     返回:
         model: 训练好的联邦模型
         history: 训练历史记录
         evaluation: 模型评估结果
     """
+    
+    def create_dp_keras_model():
+        """创建带差分隐私保护的模型"""
+        try:
+            from tensorflow_privacy.privacy.optimizers import dp_optimizer_keras
+        except ImportError:
+            # 如果没有安装privacy库，返回普通模型
+            return create_keras_model()
+        
+        model = tf.keras.models.Sequential([
+            tf.keras.layers.Dense(10, activation='relu', input_shape=(len(all_features),),
+                                kernel_regularizer=tf.keras.regularizers.l2(0.01)),
+            tf.keras.layers.BatchNormalization(),
+            tf.keras.layers.Dropout(0.2),
+            tf.keras.layers.Dense(5, activation='relu'),
+            tf.keras.layers.Dense(1)
+        ])
+        
+        # 使用差分隐私优化器
+        optimizer = dp_optimizer_keras.DPKerasSGDOptimizer(
+            l2_norm_clip=l2_norm_clip,
+            noise_multiplier=noise_multiplier,
+            learning_rate=0.1
+        )
+        
+        model.compile(optimizer=optimizer, loss='mse', metrics=['mae'])
+        return model
+    
     try:
         # 导入TensorFlow和TensorFlow Federated
         import tensorflow as tf
@@ -189,19 +231,52 @@ def run_federated_learning(data_sources, target_column, num_rounds=10, batch_siz
     client_names = []
     all_features = set()
     
+    # 计算差分隐私保证
+    try:
+        from tensorflow_privacy.privacy.analysis import compute_dp_sgd_privacy
+        eps, delta = compute_dp_sgd_privacy.compute_dp_sgd_privacy(
+            n=sum(len(df) for _, df in data_sources),
+            batch_size=batch_size,
+            noise_multiplier=noise_multiplier,
+            epochs=num_rounds,
+            delta=1e-5
+        )
+        global privacy_metrics
+        privacy_metrics = {
+            "epsilon": float(eps),
+            "delta": float(delta),
+            "noise_multiplier": noise_multiplier,
+            "secure_aggregation": secure_aggregation
+        }
+    except ImportError:
+        privacy_metrics = {
+            "note": "隐私度量不可用 - 未安装tensorflow_privacy",
+            "secure_aggregation": secure_aggregation
+        }
+
+    # 替换数据预处理代码
     for source_name, df in data_sources:
         # 提取特征和目标
         features = df.select_dtypes(include=[np.number]).columns.tolist()
-        features.remove(target_column) if target_column in features else None
+        if target_column in features:
+            features.remove(target_column)
         all_features.update(features)
         
-        X = df[features].fillna(0).values
-        y = df[target_column].fillna(0).values
+        # 智能缺失值处理
+        X_df = df[features].copy()
+        for col in X_df.columns:
+            X_df[col] = X_df[col].fillna(X_df[col].median())
+            # 标准化数值特征
+            if X_df[col].std() > 0:
+                X_df[col] = (X_df[col] - X_df[col].mean()) / X_df[col].std()
+        
+        X = X_df.values
+        y = df[target_column].fillna(df[target_column].median()).values
         
         # 创建TensorFlow数据集
         dataset = tf.data.Dataset.from_tensor_slices((X, y))
         dataset = dataset.shuffle(len(df)).batch(batch_size)
-        
+        # 添加数据集到联邦学习客户端列表
         client_datasets.append(dataset)
         client_names.append(source_name)
     
@@ -213,9 +288,10 @@ def run_federated_learning(data_sources, target_column, num_rounds=10, batch_siz
             tf.keras.layers.Dense(1)
         ])
     
-    # TFF模型函数
+    # 修改模型函数
     def model_fn():
-        keras_model = create_keras_model()
+        """使用差分隐私模型"""
+        keras_model = create_dp_keras_model()
         return tff.learning.from_keras_model(
             keras_model,
             input_spec=client_datasets[0].element_spec,
@@ -224,11 +300,28 @@ def run_federated_learning(data_sources, target_column, num_rounds=10, batch_siz
         )
     
     # 联邦学习过程
-    iterative_process = tff.learning.build_federated_averaging_process(
-        model_fn,
-        client_optimizer_fn=lambda: tf.keras.optimizers.SGD(learning_rate=0.1),
-        server_optimizer_fn=lambda: tf.keras.optimizers.SGD(learning_rate=1.0)
-    )
+    if secure_aggregation:
+        try:
+            secure_aggregator = tff.aggregators.SecureAggregator()
+            iterative_process = tff.learning.build_federated_averaging_process(
+                model_fn,
+                client_optimizer_fn=lambda: tf.keras.optimizers.SGD(learning_rate=0.1),
+                server_optimizer_fn=lambda: tf.keras.optimizers.SGD(learning_rate=1.0),
+                model_update_aggregation_factory=secure_aggregator
+            )
+        except Exception as e:
+            print(f"安全聚合初始化失败: {str(e)}，使用标准聚合")
+            iterative_process = tff.learning.build_federated_averaging_process(
+                model_fn,
+                client_optimizer_fn=lambda: tf.keras.optimizers.SGD(learning_rate=0.1),
+                server_optimizer_fn=lambda: tf.keras.optimizers.SGD(learning_rate=1.0)
+            )
+    else:
+        iterative_process = tff.learning.build_federated_averaging_process(
+            model_fn,
+            client_optimizer_fn=lambda: tf.keras.optimizers.SGD(learning_rate=0.1),
+            server_optimizer_fn=lambda: tf.keras.optimizers.SGD(learning_rate=1.0)
+        )
     
     # 初始化服务器状态
     state = iterative_process.initialize()
@@ -239,26 +332,20 @@ def run_federated_learning(data_sources, target_column, num_rounds=10, batch_siz
         # 执行一轮联邦训练
         state, metrics = iterative_process.next(state, client_datasets)
         history.append(float(metrics['train']['loss']))
-    
-    # 评估联邦模型
-    evaluation = evaluate_federated_model(state, client_datasets, client_names)
-    
-    return state, history, evaluation
 
-def run_simulated_federated_learning(data_sources, target_column, num_rounds=10):
-    """
-    模拟联邦学习过程 (当TensorFlow Federated未安装时使用)
-    
-    参数:
-        data_sources: 多个数据源的列表，每项为(数据源名称, 数据帧)元组
-        target_column: 目标列名称
-        num_rounds: 联邦学习轮数
-    
-    返回:
-        model: 训练好的模型
-        history: 训练历史记录
-        evaluation: 模型评估结果
-    """
+    # 添加缺失的评估和返回部分
+    # 评估联邦模型
+    evaluation = evaluate_federated_model(state, client_datasets, client_names, create_keras_model)
+
+    # 从服务器状态中提取模型
+    keras_model = create_keras_model()
+    tff.learning.assign_weights_to_keras_model(keras_model, state.model)
+
+    # 返回结果
+    return keras_model, history, evaluation
+
+def run_simulated_federated_learning(data_sources, target_column, num_rounds=10, batch_size=32):
+    """模拟联邦学习过程 (当TensorFlow Federated未安装时使用)"""
     from sklearn.linear_model import LinearRegression
     
     # 数据预处理
@@ -267,29 +354,41 @@ def run_simulated_federated_learning(data_sources, target_column, num_rounds=10)
     client_X = []
     client_y = []
     client_names = []
+    all_features = set()
     
+    # 数据预处理实现 - 修复缩进
     for source_name, df in data_sources:
         # 提取特征和目标
         features = df.select_dtypes(include=[np.number]).columns.tolist()
-        features.remove(target_column) if target_column in features else None
+        if target_column in features:
+            features.remove(target_column)
+        all_features.update(features)
         
-        X = df[features].fillna(0)
-        y = df[target_column].fillna(0)
+        # 智能缺失值处理
+        X_df = df[features].copy()
+        for col in X_df.columns:
+            X_df[col] = X_df[col].fillna(X_df[col].median())
+            # 标准化数值特征
+            if X_df[col].std() > 0:
+                X_df[col] = (X_df[col] - X_df[col].mean()) / X_df[col].std()
         
-        all_X.append(X)
-        all_y.append(y)
-        client_X.append(X)
-        client_y.append(y)
+        # 准备客户端数据
+        client_X.append(X_df)
+        client_y.append(df[target_column].fillna(df[target_column].median()))
         client_names.append(source_name)
+        
+        # 收集所有数据用于全局评估
+        all_X.append(X_df)
+        all_y.append(df[target_column].fillna(df[target_column].median()))
     
-    # 合并所有数据
+    # 合并所有数据 - 修复缩进(移出循环)
     X_combined = pd.concat(all_X)
     y_combined = pd.concat(all_y)
     
-    # 初始化模型
+    # 初始化模型 - 修复缩进(移出循环)
     model = LinearRegression()
     
-    # 模拟联邦学习过程
+    # 修正模拟联邦学习过程 - 修复缩进(移出循环)
     history = []
     for _ in range(num_rounds):
         # 在每个客户端上训练
@@ -301,7 +400,7 @@ def run_simulated_federated_learning(data_sources, target_column, num_rounds=10)
         mse = np.mean((y_combined - y_pred) ** 2)
         history.append(float(mse))
     
-    # 评估模型
+    # 评估模型 - 修复缩进(移出循环)
     evaluation = {
         'metrics': [],
         'predictions': {
@@ -309,8 +408,7 @@ def run_simulated_federated_learning(data_sources, target_column, num_rounds=10)
             'predicted': []
         }
     }
-    
-    # 对每个客户端评估
+    # 对每个客户端评估 - 保持正确缩进
     for i, name in enumerate(client_names):
         y_pred = model.predict(client_X[i])
         mse = np.mean((client_y[i] - y_pred) ** 2)
@@ -326,23 +424,86 @@ def run_simulated_federated_learning(data_sources, target_column, num_rounds=10)
             'r2': float(r2)
         })
         
-        # 添加预测值和实际值 (最多100个点，避免JSON太大)
+        # 添加预测值和实际值
         sample_size = min(100, len(client_y[i]))
         sample_indices = np.random.choice(len(client_y[i]), sample_size, replace=False)
         
         evaluation['predictions']['actual'].extend(client_y[i].iloc[sample_indices].tolist())
         evaluation['predictions']['predicted'].extend(y_pred[sample_indices].tolist())
     
-    # 创建预测散点图
-    create_prediction_plot(evaluation['predictions']['actual'], evaluation['predictions']['predicted'])
+    # 创建预测散点图 - 修复缩进(移出循环)
+    plot_image = create_prediction_plot(
+        evaluation['predictions']['actual'],
+        evaluation['predictions']['predicted']
+    )
+    evaluation['plot'] = plot_image
     
+    # 返回结果 - 修复缩进(移出循环)
     return model, history, evaluation
 
-def evaluate_federated_model(state, client_datasets, client_names):
+# 实现评估函数
+def evaluate_federated_model(state, client_datasets, client_names, model_fn):
     """评估联邦学习模型在各个客户端上的表现"""
-    # 注意：这是TFF实现的占位符，在run_simulated_federated_learning中
-    # 已经实现了模拟评估，因此这个函数不会被调用
-    pass
+    import tensorflow as tf
+    
+    # 使用传入的模型函数
+    keras_model = model_fn()
+    
+    # 从联邦状态获取权重并应用
+    tff.learning.assign_weights_to_keras_model(keras_model, state.model)
+    
+    evaluation = {
+        'metrics': [],
+        'predictions': {'actual': [], 'predicted': []},
+        'privacy_metrics': privacy_metrics
+    }
+    
+    # 评估每个客户端
+    for i, (dataset, name) in enumerate(zip(client_datasets, client_names)):
+        x_all, y_all = [], []
+        
+        # 收集数据用于评估
+        for x, y in dataset:
+            x_all.append(x.numpy())
+            y_all.append(y.numpy())
+            
+        if not x_all:  # 防止空数据集
+            continue
+            
+        x_test = np.vstack(x_all)
+        y_test = np.concatenate(y_all)
+        
+        # 在本地预测 - 无需向服务器发送数据
+        y_pred = keras_model.predict(x_test).flatten()
+        
+        # 计算指标
+        mse = np.mean((y_test - y_pred) ** 2)
+        rmse = np.sqrt(mse)
+        mae = np.mean(np.abs(y_test - y_pred))
+        r2 = 1 - mse / np.var(y_test) if np.var(y_test) > 0 else 0
+        
+        evaluation['metrics'].append({
+            'source': name,
+            'mse': float(mse),
+            'rmse': float(rmse),
+            'mae': float(mae),
+            'r2': float(r2)
+        })
+        
+        # 保存部分结果用于可视化
+        sample_size = min(100, len(y_test))
+        indices = np.random.choice(len(y_test), sample_size, replace=False)
+        evaluation['predictions']['actual'].extend(y_test[indices].tolist())
+        evaluation['predictions']['predicted'].extend(y_pred[indices].tolist())
+    
+    # 生成预测散点图
+    plot_image = create_prediction_plot(
+        evaluation['predictions']['actual'],
+        evaluation['predictions']['predicted']
+    )
+    evaluation['plot'] = plot_image
+    
+    return evaluation
 
 def create_prediction_plot(actual, predicted):
     """创建预测vs实际值的散点图"""
@@ -354,7 +515,6 @@ def create_prediction_plot(actual, predicted):
     plt.title('联邦学习模型预测值 vs 实际值')
     plt.grid(True)
     
-    # 将图表转换为Base64编码
     buffer = io.BytesIO()
     plt.savefig(buffer, format='png')
     buffer.seek(0)

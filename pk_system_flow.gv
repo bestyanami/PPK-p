@@ -1,0 +1,50 @@
+digraph G {
+	dpi=300 rankdir=TB size="10,8"
+	subgraph cluster_0 {
+		color="#0066cc" fillcolor="#b3e0ff" label="数据管理模块" style=filled
+		"上传" [label="数据上传与转换"]
+		"质控" [label="质量控制与标准化"]
+		"上传" -> "质控"
+	}
+	subgraph cluster_1 {
+		color="#339933" fillcolor="#c6ecc6" label="模型构建模块" style=filled
+		"选择" [label="模型库选择"]
+		"拟合" [label="参数拟合与优度评价"]
+		"选择" -> "拟合"
+	}
+	subgraph cluster_2 {
+		color="#339933" fillcolor="#c6ecc6" label="协变量筛选模块" style=filled
+		"分析" [label="影响因素分析"]
+		"筛选" [label="显著变量识别"]
+		"分析" -> "筛选"
+	}
+	subgraph cluster_3 {
+		color="#cc8800" fillcolor="#ffe6b3" label="参数评估模块" style=filled
+		"估计" [label="参数统计估计"]
+		"可视化" [label="相关性热图展示"]
+		"估计" -> "可视化"
+	}
+	subgraph cluster_4 {
+		color="#cc8800" fillcolor="#ffe6b3" label="模型诊断模块" style=filled
+		"残差" [label="残差图分析"]
+		"预测" [label="预测-观测值评价"]
+		"残差" -> "预测"
+	}
+	subgraph cluster_5 {
+		color="#cc0000" fillcolor="#ffcccc" label="剂量优化模块" style=filled
+		"模拟" [label="浓度模拟预测"]
+		"方案" [label="个体化给药推荐"]
+		"模拟" -> "方案"
+	}
+	"质控" -> "选择"
+	"拟合" -> "分析"
+	"筛选" -> "估计"
+	"可视化" -> "残差"
+	"预测" -> "模拟"
+	edge [style=invis]
+	cluster_0 -> cluster_1
+	cluster_1 -> cluster_2
+	cluster_2 -> cluster_3
+	cluster_3 -> cluster_4
+	cluster_4 -> cluster_5
+}
