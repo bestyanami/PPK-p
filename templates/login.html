@@ -12,7 +12,7 @@
                 <h3 class="card-title">PopPK系统登录</h3>
             </div>
             <div class="card-body">
-                <form method="POST" action="{{ url_for('login') }}">
+                <form method="POST" action="{{ url_for('login', next=request.args.get('next')) }}">
                     <div class="mb-3">
                         <label for="username" class="form-label">用户名</label>
                         <input type="text" class="form-control" id="username" name="username" required>

@@ -1,9 +1,11 @@
 # docs有onedrive管理
 docs/
 
-PKdata/
-FL_Models/
-ML_Models/
+/PKdata
+/FL_Models
+/ML_Models
+/PKObjResultsFolder
+/PKPEResultsFolder
 .$*
 
 # Byte-compiled / optimized / DLL files
