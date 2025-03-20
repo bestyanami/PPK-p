@@ -15,11 +15,20 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 plt.ioff()
 
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[logging.FileHandler('federated_learning.log'), logging.StreamHandler()]
+)
+
 # 创建一个Blueprint
 federated_learning_bp = Blueprint('federated_learning', __name__, url_prefix='/federated_learning')
 
 # 确保模型保存文件夹存在
 os.makedirs('FL_Models', exist_ok=True)
+# 添加这行以确保预测结果文件夹存在
+os.makedirs('Predictions', exist_ok=True)
 
 # 全局变量存储当前联邦学习会话的模型
 current_federated_model = None
@@ -109,18 +118,23 @@ def run_federated():
         
     except Exception as e:
         import traceback
+        error_details = traceback.format_exc()
+        logging.error(f"联邦学习错误: {str(e)}\n{error_details}")
+        # 添加错误可视化功能
         return jsonify({
             'status': 'error', 
             'message': f'运行联邦学习时出错: {str(e)}',
-            'traceback': traceback.format_exc()
+            'traceback': error_details,
+            'error_type': e.__class__.__name__,
         })
 
 @federated_learning_bp.route('/save_federated_model', methods=['POST'])
 @login_required
 def save_federated_model():
-    """保存联邦学习模型"""
     try:
         model_name = request.form.get('model_name')
+        drug_name = request.form.get('drug_name', '未指定')  # 添加药物名称
+        concentration_unit = request.form.get('concentration_unit', '未指定')  # 添加浓度单位
         
         if not model_name:
             return jsonify({'status': 'error', 'message': '请提供模型名称'})
@@ -138,9 +152,12 @@ def save_federated_model():
         metadata = {
             'model_name': model_name,
             'model_type': 'federated_learning',
+            'drug_name': drug_name,  # 新增
+            'concentration_unit': concentration_unit,  # 新增
             'training_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'history': current_federated_history['history'],
-            'evaluation': current_federated_history['evaluation']
+            'evaluation': current_federated_history['evaluation'],
+            'feature_names': current_federated_history.get('feature_names', [])
         }
         
         metadata_path = os.path.join('FL_Models', f"{os.path.splitext(model_filename)[0]}.json")
@@ -222,8 +239,10 @@ def run_federated_learning(data_sources, target_column, num_rounds=10, batch_siz
         # 导入TensorFlow和TensorFlow Federated
         import tensorflow as tf
         import tensorflow_federated as tff
+        logging.info("使用TensorFlow Federated进行联邦学习")
     except ImportError:
         # 如果没有安装TensorFlow Federated，使用模拟实现
+        logging.warning("TensorFlow Federated未安装，使用模拟实现替代")
         return run_simulated_federated_learning(data_sources, target_column, num_rounds)
     
     # 数据预处理
@@ -254,13 +273,19 @@ def run_federated_learning(data_sources, target_column, num_rounds=10, batch_siz
             "secure_aggregation": secure_aggregation
         }
 
-    # 替换数据预处理代码
+    # 数据预处理
     for source_name, df in data_sources:
-        # 提取特征和目标
+        # 提取特征和目标，明确忽略ID列
         features = df.select_dtypes(include=[np.number]).columns.tolist()
+        # 忽略ID和其他非特征列
+        pk_ignore_columns = ['ID', 'USUBJID', 'STUDYID', 'MDV', 'EVID', 'CMT']
+        for col in pk_ignore_columns:
+            if col in features:
+                features.remove(col)
+                logging.info(f"在联邦学习中忽略列: {col}")
+                
         if target_column in features:
             features.remove(target_column)
-        all_features.update(features)
         
         # 智能缺失值处理
         X_df = df[features].copy()
@@ -303,6 +328,7 @@ def run_federated_learning(data_sources, target_column, num_rounds=10, batch_siz
     if secure_aggregation:
         try:
             secure_aggregator = tff.aggregators.SecureAggregator()
+            logging.info("启用安全聚合机制")
             iterative_process = tff.learning.build_federated_averaging_process(
                 model_fn,
                 client_optimizer_fn=lambda: tf.keras.optimizers.SGD(learning_rate=0.1),
@@ -310,7 +336,10 @@ def run_federated_learning(data_sources, target_column, num_rounds=10, batch_siz
                 model_update_aggregation_factory=secure_aggregator
             )
         except Exception as e:
-            print(f"安全聚合初始化失败: {str(e)}，使用标准聚合")
+            error_msg = f"安全聚合初始化失败: {str(e)}，使用标准聚合"
+            logging.warning(error_msg)
+            # 在前端显示警告
+            privacy_metrics["secure_aggregation_error"] = error_msg
             iterative_process = tff.learning.build_federated_averaging_process(
                 model_fn,
                 client_optimizer_fn=lambda: tf.keras.optimizers.SGD(learning_rate=0.1),
@@ -356,10 +385,15 @@ def run_simulated_federated_learning(data_sources, target_column, num_rounds=10,
     client_names = []
     all_features = set()
     
-    # 数据预处理实现 - 修复缩进
+    # 数据预处理实现
     for source_name, df in data_sources:
         # 提取特征和目标
         features = df.select_dtypes(include=[np.number]).columns.tolist()
+        # 忽略ID和其他非特征列
+        pk_ignore_columns = ['ID', 'USUBJID', 'STUDYID', 'MDV', 'EVID', 'CMT']
+        for col in pk_ignore_columns:
+            if col in features:
+                features.remove(col)
         if target_column in features:
             features.remove(target_column)
         all_features.update(features)
@@ -522,3 +556,206 @@ def create_prediction_plot(actual, predicted):
     plt.close()
     
     return plot_image
+
+@federated_learning_bp.route('/load_model', methods=['POST'])
+@login_required
+def load_model():
+    """加载已保存的联邦学习模型"""
+    try:
+        model_filename = request.form.get('model_filename')
+        if not model_filename:
+            return jsonify({'status': 'error', 'message': '请选择模型文件'})
+            
+        model_path = os.path.join('FL_Models', model_filename)
+        if not os.path.exists(model_path):
+            return jsonify({'status': 'error', 'message': '模型文件不存在'})
+            
+        # 加载模型与元数据
+        global current_federated_model, current_federated_history
+        current_federated_model = joblib.load(model_path)
+        
+        # 加载元数据
+        metadata_path = os.path.join('FL_Models', f"{os.path.splitext(model_filename)[0]}.json")
+        if os.path.exists(metadata_path):
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+                current_federated_history = {
+                    'model': current_federated_model,
+                    'history': metadata.get('history', []),
+                    'evaluation': metadata.get('evaluation', {})
+                }
+        
+        return jsonify({'status': 'success', 'message': '模型加载成功'})
+    except Exception as e:
+        logging.error(f"模型加载错误: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)})
+    
+@federated_learning_bp.route('/predict', methods=['POST'])
+@login_required
+def predict():
+    """使用已加载模型进行预测"""
+    try:
+        if current_federated_model is None:
+            return jsonify({'status': 'error', 'message': '请先加载模型'})
+            
+        # 获取输入数据
+        input_data = request.json.get('data')
+        if not input_data:
+            return jsonify({'status': 'error', 'message': '请提供输入数据'})
+            
+        # 处理输入数据
+        df = pd.DataFrame(input_data)
+        
+        # 数据预处理 - 过滤ID类列和其他非特征列
+        features = df.select_dtypes(include=[np.number]).columns.tolist()
+        pk_ignore_columns = ['ID', 'USUBJID', 'STUDYID', 'MDV', 'EVID', 'CMT']
+        for col in pk_ignore_columns:
+            if col in features:
+                features.remove(col)
+        
+        X = df[features].fillna(df[features].median()).values
+        
+        # 检查维度匹配
+        if hasattr(current_federated_model, 'n_features_in_'):
+            expected_features = current_federated_model.n_features_in_
+            if X.shape[1] != expected_features:
+                if X.shape[1] > expected_features:
+                    # 截取前N个特征
+                    X = X[:, :expected_features]
+                    logging.info(f"特征维度截断: {X.shape[1]} → {expected_features}")
+                else:
+                    return jsonify({
+                        'status': 'error',
+                        'message': f'特征维度不匹配: 模型需要{expected_features}个特征，当前输入有{X.shape[1]}个'
+                    })
+        
+        # 获取药物信息和单位（如果有）
+        drug_name = '未指定'
+        concentration_unit = '未指定'
+        if current_federated_history and isinstance(current_federated_history, dict):
+            meta = current_federated_history.get('evaluation', {})
+            drug_name = meta.get('drug_name', '未指定')
+            concentration_unit = meta.get('concentration_unit', '未指定')
+        
+        # 进行预测
+        predictions = current_federated_model.predict(X)
+        
+        return jsonify({
+            'status': 'success',
+            'predictions': predictions.tolist(),
+            'drug_name': drug_name,
+            'concentration_unit': concentration_unit
+        })
+    except Exception as e:
+        logging.error(f"预测错误: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)})
+    
+@federated_learning_bp.route('/batch_predict', methods=['POST'])
+@login_required
+def batch_predict():
+    """批量预测功能"""
+    global current_federated_model, current_federated_history
+
+    # 在函数开始就初始化feature_names变量，避免作用域问题
+    feature_names = []
+
+    try:
+        if current_federated_model is None:
+            # 尝试从请求加载模型
+            model_filename = request.form.get('model_filename')
+            if model_filename:
+                model_path = os.path.join('FL_Models', model_filename)
+                current_federated_model = joblib.load(model_path)
+                
+                # 加载元数据
+                metadata_path = os.path.join('FL_Models', f"{os.path.splitext(model_filename)[0]}.json")
+                feature_names = []  # 初始化为空列表而不是None
+                if os.path.exists(metadata_path):
+                    with open(metadata_path, 'r') as f:
+                        metadata = json.load(f)
+                        feature_names = metadata.get('feature_names', [])
+            else:
+                return jsonify({'status': 'error', 'message': '请先加载模型'})
+        else:
+            # 模型已加载，尝试从current_federated_history获取特征名
+            if current_federated_history and isinstance(current_federated_history, dict):
+                feature_names = current_federated_history.get('feature_names', [])
+                
+        # 获取CSV文件
+        if 'file' not in request.files:
+            return jsonify({'status': 'error', 'message': '请上传数据文件'})
+            
+        file = request.files['file']
+        df = pd.read_csv(file)
+        
+        # 明确忽略ID列和其他非特征列
+        pk_ignore_columns = ['ID', 'USUBJID', 'STUDYID', 'MDV', 'EVID', 'CMT']
+        logging.info(f"批量预测数据包含列: {', '.join(df.columns)}")
+        
+        # 数据预处理 - 增强特征匹配逻辑
+        try:
+            # 检查模型是否有特征数量属性
+            if hasattr(current_federated_model, 'n_features_in_'):
+                expected_features = current_federated_model.n_features_in_
+                logging.info(f"模型期望的特征数量: {expected_features}")
+            else:
+                expected_features = None
+            
+            # 处理特征
+            if feature_names and len(feature_names) > 0:
+                logging.info(f"使用元数据中保存的特征列: {feature_names}")
+                
+                # 检查缺失特征
+                missing_features = [f for f in feature_names if f not in df.columns]
+                if missing_features:
+                    return jsonify({
+                        'status': 'error', 
+                        'message': f'输入数据缺少必要特征: {", ".join(missing_features)}'
+                    })
+                    
+                # 使用保存的特征列进行预测
+                X = df[feature_names].fillna(df[feature_names].median()).values
+            else:
+                # 回退到数值特征选择并删除非特征列
+                features = df.select_dtypes(include=[np.number]).columns.tolist()
+                for col in pk_ignore_columns:
+                    if col in features:
+                        features.remove(col)
+                        logging.info(f"批量预测中忽略列: {col}")
+                
+                X = df[features].fillna(df[features].median()).values
+                logging.info(f"使用自动选择的特征: {features}")
+                
+            # 检查特征数量是否匹配模型预期
+            if expected_features and X.shape[1] != expected_features:
+                # 记录特征差异，帮助分析
+                logging.info(f"特征维度不匹配: 模型期望{expected_features}个特征，输入数据有{X.shape[1]}个特征")
+                
+                # 决定是否执行特征截断或填充
+                if X.shape[1] > expected_features:
+                    logging.warning(f"截断特征数量从{X.shape[1]}到{expected_features}")
+                    X = X[:, :expected_features]
+                
+            # 执行预测
+            predictions = current_federated_model.predict(X)
+            
+            # 将预测结果添加到原始数据
+            df['predicted_value'] = predictions
+            
+            # 保存预测结果
+            output_filename = f"prediction_result_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
+            output_path = os.path.join('Predictions', output_filename)
+            df.to_csv(output_path, index=False)
+            
+            return jsonify({
+                'status': 'success',
+                'message': '批量预测完成',
+                'output_file': output_filename
+            })
+            
+        except Exception as e:
+            logging.error(f"预测处理错误: {str(e)}")
+            return jsonify({'status': 'error', 'message': f'预测处理错误: {str(e)}'})
+    except Exception as e:
+        logging.error(f"批量预测错误: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'批量预测错误: {str(e)}'})
