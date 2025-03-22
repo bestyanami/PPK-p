@@ -1,1 +1,0 @@
-{"session_id": "20250322173826", "model_path": "FL_Models\\FL_111_20250320221558.joblib", "feature_names": ["ID", "DV", "AMT", "WT", "AGE", "SEX", "SCR", "ALT", "AST", "EVID", "CMT", "MDV", "BSA"], "metadata": {"drug_name": "\u672a\u6307\u5b9a", "concentration_unit": "\u672a\u6307\u5b9a", "model_type": "\u8054\u90a6\u5b66\u4e60"}}

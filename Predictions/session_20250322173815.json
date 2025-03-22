@@ -1,1 +1,0 @@
-{"session_id": "20250322173815", "model_path": "ML_Models\\ML_random_forest_B_20250322173803.joblib", "feature_names": ["TIME", "DV", "AMT", "WT", "AGE", "SEX", "SCR", "ALT", "AST", "EVID", "CMT", "MDV", "BSA"], "metadata": {"drug_name": "\u672a\u6307\u5b9a", "concentration_unit": "\u672a\u6307\u5b9a", "model_type": "\u673a\u5668\u5b66\u4e60"}}
