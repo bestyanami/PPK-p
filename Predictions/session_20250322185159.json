@@ -1,0 +1,1 @@
+{"session_id": "20250322185159", "model_path": "FL_Models\\FL_warfarin_20250322185144.joblib", "feature_names": ["TIME", "DV", "AMT", "WT", "AGE", "SEX", "SCR", "CYP2C9", "VKORC1"], "metadata": {"drug_name": "warfarin", "concentration_unit": "mg/L", "model_type": "\u8054\u90a6\u5b66\u4e60"}}

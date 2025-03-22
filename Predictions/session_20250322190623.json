@@ -1,0 +1,1 @@
+{"session_id": "20250322190623", "model_path": "ML_Models\\ML_222_20250322190609.joblib", "feature_names": ["TIME", "DV", "AMT", "WT", "AGE", "SEX", "SCR", "CYP2C9", "VKORC1", "EVID", "MDV"], "metadata": {"drug_name": "\u534e\u6cd5\u6797", "concentration_unit": "mg/L", "model_type": "\u673a\u5668\u5b66\u4e60"}}

@@ -210,18 +210,37 @@ def batch_predict():
         file = request.files['file']
         df = pd.read_csv(file)
         
-        # 准备预测数据
+        # 修正批量预测代码
         if feature_names and len(feature_names) > 0:
-            # 检查缺失特征
-            missing_features = [f for f in feature_names if f not in df.columns]
-            if missing_features:
-                return jsonify({
-                    'status': 'error', 
-                    'message': f'输入数据缺少必要特征: {", ".join(missing_features)}'
-                })
+            # 准备预测数据
+            missing_cols = [f for f in feature_names if f not in df.columns]
             
-            # 使用已知特征进行预测
-            X = df[feature_names].fillna(0)
+            # 为缺失列添加默认值（除DV等目标变量外）
+            for col in missing_cols:
+                if col in ['DV', 'CONC', 'DVOR']:
+                    # 排除目标变量
+                    continue
+                else:
+                    # 为其他缺失特征添加默认值列
+                    df[col] = 0
+                    print(f"添加缺失特征列: {col}")
+            
+            # 创建预测数据集，确保包含所有模型所需特征
+            X = pd.DataFrame()
+            for feat in feature_names:
+                if feat in ['DV', 'CONC', 'DVOR']:
+                    # 对于目标变量，添加空值列
+                    X[feat] = 0
+                elif feat in df.columns:
+                    # 对于数据中存在的特征
+                    X[feat] = df[feat].fillna(0)
+                else:
+                    # 其他缺失特征
+                    X[feat] = 0
+                    
+            # 确保特征顺序与模型期望一致
+            X = X[feature_names]
+
         else:
             # 默认使用所有数值列
             X = df.select_dtypes(include=[np.number]).fillna(0)
