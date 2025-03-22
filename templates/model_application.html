@@ -1,0 +1,499 @@
+{% extends "base.html" %}
+
+{% block title %}联邦模型应用 - Shiny-PopPK{% endblock %}
+
+{% block page_title %}联邦模型应用{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <h5><i class="fas fa-info-circle me-2"></i>关于模型应用</h5>
+            <p>加载联邦学习或机器学习训练的药动学模型，并使用它们进行单样本或批量预测。</p>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 模型选择卡片 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title">模型选择</h3>
+            </div>
+            <div class="card-body">
+                <!-- 模型选择列表 -->
+                <div class="mb-3">
+                    <label class="form-label">选择预训练模型</label>
+                    <select id="model-select" class="form-select">
+                        <option value="">--请选择模型--</option>
+                    </select>
+                    <div class="form-text">可以选择联邦学习或机器学习训练的模型</div>
+                </div>
+
+                <div class="mb-3 text-center">
+                    <button id="load-model-btn" class="btn btn-primary">
+                        <i class="fas fa-download me-1"></i> 加载模型
+                    </button>
+                </div>
+
+                <!-- 模型信息显示区域 -->
+                <div id="model-info" class="mt-3 d-none">
+                    <div class="alert alert-success">
+                        <strong>模型已加载!</strong>
+                        <div id="model-details"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 单样本预测卡片 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-success text-white">
+                <h3 class="card-title">单样本预测</h3>
+            </div>
+            <div class="card-body">
+                <div id="feature-inputs" class="mb-3">
+                    <div class="alert alert-info">请先加载模型以显示输入选项</div>
+                </div>
+
+                <div class="text-center">
+                    <button id="predict-btn" class="btn btn-success" disabled>
+                        <i class="fas fa-calculator me-1"></i> 执行预测
+                    </button>
+                </div>
+
+                <!-- 预测结果显示区域 -->
+                <div id="prediction-result" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 批量预测卡片 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h3 class="card-title">批量预测</h3>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="batch-file" class="form-label">上传CSV文件</label>
+                            <input type="file" id="batch-file" class="form-control" accept=".csv" disabled>
+                            <div class="form-text">CSV文件应包含与模型训练时相同的特征列</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <button id="batch-predict-btn" class="btn btn-info" disabled>
+                                <i class="fas fa-table me-1"></i> 批量预测
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div id="batch-file-info" class="mb-3"></div>
+                        <div id="batch-result" class="mb-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 结果历史记录卡片 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h3 class="card-title">预测历史记录</h3>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="history-table" class="table table-striped table-bordered">
+                        <thead>
+                            <tr>
+                                <th>文件名</th>
+                                <th>创建时间</th>
+                                <th>记录数</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body">
+                            <!-- 历史记录将通过JavaScript动态填充 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 当前会话ID
+    let currentSessionId = null;
+    
+    $(document).ready(function() {
+        // 加载模型列表
+        loadModelList();
+        
+        // 加载模型
+        $('#load-model-btn').click(function() {
+            const selectedModel = $('#model-select').val();
+            if (!selectedModel) {
+                alert('请选择一个模型');
+                return;
+            }
+            
+            // 解析模型信息
+            const [modelName, modelType] = selectedModel.split('|');
+            
+            $.ajax({
+                url: '{{ url_for("model_application.load_model") }}',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    filename: modelName,
+                    type: modelType
+                }),
+                success: function(response) {
+                    if (response.status === 'success') {
+                        // 保存会话ID
+                        currentSessionId = response.session_id;
+                        
+                        // 显示模型信息
+                        $('#model-info').removeClass('d-none');
+                        $('#model-details').html(`
+                            <p>模型类型: ${modelType}</p>
+                            <p>药物名称: ${response.drug_name || '未指定'}</p>
+                            <p>浓度单位: ${response.concentration_unit || '未指定'}</p>
+                        `);
+                        
+                        // 生成特征输入表单
+                        displayFeatureInputs(response.feature_names);
+                        
+                        // 启用预测按钮
+                        $('#predict-btn').prop('disabled', false);
+                        $('#batch-file').prop('disabled', false);
+                        $('#batch-predict-btn').prop('disabled', false);
+                    } else {
+                        alert('加载模型失败: ' + response.message);
+                    }
+                },
+                error: function() {
+                    alert('加载模型失败: 服务器错误');
+                }
+            });
+        });
+        
+        // 单样本预测
+        $('#predict-btn').click(function() {
+            performPrediction();
+        });
+        
+        // 批量预测
+        $('#batch-predict-btn').click(function() {
+            performBatchPrediction();
+        });
+        
+        // 文件选择事件
+        $('#batch-file').change(function() {
+            analyzeCSVFile(this.files[0]);
+        });
+    });
+    
+    // 加载模型列表
+    function loadModelList() {
+        $.ajax({
+            url: '{{ url_for("model_application.model_list") }}',
+            type: 'GET',
+            success: function(response) {
+                if (response.status === 'success') {
+                    let options = '<option value="">--请选择模型--</option>';
+                    
+                    response.models.forEach(model => {
+                        options += `<option value="${model.name}|${model.type}">${model.name} (${model.type})</option>`;
+                    });
+                    
+                    $('#model-select').html(options);
+                } else {
+                    console.error('获取模型列表失败:', response.message);
+                }
+            },
+            error: function() {
+                console.error('获取模型列表失败: 服务器错误');
+            }
+        });
+    }
+    
+    // 显示特征输入表单
+    function displayFeatureInputs(featureNames) {
+        // 确保有特征名列表
+        const features = featureNames || [
+            'TIME', 'DV', 'AMT', 'WT', 'AGE', 'SEX', 'SCR', 'BSA', 'ALT', 'AST'
+        ];
+        
+        let html = '';
+        
+        // 按每行3个字段排列
+        const columnsPerRow = 3;
+        
+        for (let i = 0; i < features.length; i += columnsPerRow) {
+            html += '<div class="row mb-2">';
+            
+            for (let j = 0; j < columnsPerRow && (i + j) < features.length; j++) {
+                const feature = features[i + j];
+                let input = '';
+                
+                // 根据特征类型创建适当的输入控件
+                if (feature === 'SEX') {
+                    input = `<select class="form-select feature-input" data-name="${feature}">
+                                <option value="1">男</option>
+                                <option value="0">女</option>
+                            </select>`;
+                } else if (feature === 'EVID') {
+                    input = `<select class="form-select feature-input" data-name="${feature}">
+                                <option value="0">观测值 (0)</option>
+                                <option value="1">给药事件 (1)</option>
+                            </select>`;
+                } else if (feature === 'MDV') {
+                    input = `<select class="form-select feature-input" data-name="${feature}">
+                                <option value="0">非缺失 (0)</option>
+                                <option value="1">缺失 (1)</option>
+                            </select>`;
+                } else {
+                    // 为不同特征设置适当的步长
+                    const step = ['TIME', 'WT', 'AMT', 'BSA', 'SCR'].includes(feature) ? '0.1' : '0.01';
+                    input = `<input type="number" class="form-control feature-input" data-name="${feature}" step="${step}" min="0">`;
+                }
+                
+                html += `<div class="col-md-${12/columnsPerRow}">
+                            <label>${getFeatureLabel(feature)}</label>
+                            ${input}
+                        </div>`;
+            }
+            
+            html += '</div>';
+        }
+        
+        $('#feature-inputs').html(html);
+    }
+    
+    // 获取特征的中文标签
+    function getFeatureLabel(feature) {
+        const labels = {
+            'TIME': '时间',
+            'DV': '观测值',
+            'AMT': '给药量',
+            'WT': '体重',
+            'AGE': '年龄',
+            'SEX': '性别',
+            'SCR': '血清肌酐',
+            'BSA': '体表面积',
+            'ALT': 'ALT',
+            'AST': 'AST',
+            'EVID': '事件类型',
+            'MDV': '缺失值标记',
+            'CL': '清除率',
+            'V': '分布容积'
+        };
+        
+        return labels[feature] || feature;
+    }
+    
+    // 执行单样本预测
+    function performPrediction() {
+        if (!currentSessionId) {
+            alert('请先加载模型');
+            return;
+        }
+        
+        // 收集特征值
+        const features = {};
+        $('.feature-input').each(function() {
+            const name = $(this).data('name');
+            const value = $(this).val();
+            features[name] = parseFloat(value) || 0;
+        });
+        
+        // 发送预测请求
+        $.ajax({
+            url: '{{ url_for("model_application.predict") }}',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                session_id: currentSessionId,
+                features: features
+            }),
+            success: function(response) {
+                if (response.status === 'success') {
+                    $('#prediction-result').html(`
+                        <div class="alert alert-success">
+                            <strong>预测结果:</strong> ${response.prediction.toFixed(4)} 
+                            ${response.concentration_unit}
+                        </div>
+                    `);
+                } else {
+                    $('#prediction-result').html(`
+                        <div class="alert alert-danger">
+                            <strong>预测失败:</strong> ${response.message}
+                        </div>
+                    `);
+                }
+            },
+            error: function() {
+                $('#prediction-result').html(`
+                    <div class="alert alert-danger">
+                        <strong>预测失败:</strong> 服务器错误
+                    </div>
+                `);
+            }
+        });
+    }
+    
+    // 分析CSV文件
+    function analyzeCSVFile(file) {
+        if (!file) return;
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        $('#batch-file-info').html('<div class="alert alert-info">分析数据文件中...</div>');
+        
+        // 使用AJAX发送分析请求
+        // 注意：实际上需要在后端实现/analyze_csv端点
+        $.ajax({
+            url: '/model_application/analyze_csv',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.status === 'success') {
+                    $('#batch-file-info').html(`
+                        <div class="alert alert-success">
+                            <strong>文件解析成功</strong><br>
+                            总列数: ${response.columns.length}<br>
+                            数据行数: ${response.rows}<br>
+                        </div>
+                    `);
+                } else {
+                    $('#batch-file-info').html(`
+                        <div class="alert alert-danger">
+                            <strong>文件解析失败:</strong> ${response.message}
+                        </div>
+                    `);
+                }
+            },
+            error: function() {
+                $('#batch-file-info').html(`
+                    <div class="alert alert-warning">
+                        <strong>文件已选择</strong><br>
+                        准备进行批量预测
+                    </div>
+                `);
+            }
+        });
+    }
+    
+    // 执行批量预测
+    function performBatchPrediction() {
+        if (!currentSessionId) {
+            alert('请先加载模型');
+            return;
+        }
+        
+        const fileInput = document.getElementById('batch-file');
+        if (!fileInput.files || !fileInput.files[0]) {
+            alert('请选择CSV文件');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        formData.append('session_id', currentSessionId);
+        
+        $('#batch-result').html('<div class="alert alert-info">正在处理批量预测，请稍候...</div>');
+        
+        $.ajax({
+            url: '{{ url_for("model_application.batch_predict") }}',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.status === 'success') {
+                    $('#batch-result').html(`
+                        <div class="alert alert-success">
+                            <strong>批量预测完成!</strong><br>
+                            处理记录数: ${response.rows_processed}<br>
+                            结果已保存为: ${response.output_file}<br>
+                            <a href="/model_application/download/${response.output_file}" 
+                                class="btn btn-sm btn-primary mt-2">
+                                <i class="fas fa-download"></i> 下载结果
+                            </a>
+                        </div>
+                    `);
+                    
+                    // 更新历史记录表
+                    loadPredictionHistory();
+                } else {
+                    $('#batch-result').html(`
+                        <div class="alert alert-danger">
+                            <strong>批量预测失败:</strong> ${response.message}
+                        </div>
+                    `);
+                }
+            },
+            error: function() {
+                $('#batch-result').html(`
+                    <div class="alert alert-danger">
+                        <strong>批量预测失败:</strong> 服务器错误
+                    </div>
+                `);
+            }
+        });
+    }
+    
+    // 加载预测历史记录
+    function loadPredictionHistory() {
+        $.ajax({
+            url: '/model_application/prediction_history',
+            type: 'GET',
+            success: function(response) {
+                if (response.status === 'success') {
+                    let tableHtml = '';
+                    
+                    response.history.forEach(item => {
+                        tableHtml += `
+                            <tr>
+                                <td>${item.filename}</td>
+                                <td>${item.created_at}</td>
+                                <td>${item.rows}</td>
+                                <td>
+                                    <a href="/model_application/download/${item.filename}" 
+                                        class="btn btn-sm btn-primary">
+                                        <i class="fas fa-download"></i> 下载
+                                    </a>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    
+                    $('#history-table-body').html(tableHtml);
+                } else {
+                    console.error('获取预测历史失败:', response.message);
+                }
+            },
+            error: function() {
+                console.error('获取预测历史失败: 服务器错误');
+            }
+        });
+    }
+</script>
+{% endblock %}

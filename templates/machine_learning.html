@@ -56,35 +56,6 @@
                 </form>
             </div>
         </div>
-
-        <!-- 模型预测区域 -->
-        <div class="card">
-            <div class="card-header bg-success text-white">
-                <h3 class="card-title">使用模型预测</h3>
-            </div>
-            <div class="card-body">
-                <form id="predictionForm">
-                    <div class="mb-3">
-                        <label for="model_name" class="form-label">选择模型</label>
-                        <select class="form-select" id="model_name" name="model_name">
-                            <!-- 模型列表将通过JavaScript动态填充 -->
-                        </select>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="input_data" class="form-label">预测数据</label>
-                        <select class="form-select" id="input_data" name="input_data">
-                            <!-- 数据集列表将通过JavaScript动态填充 -->
-                        </select>
-                        <div class="form-text">选择用于预测的数据文件</div>
-                    </div>
-
-                    <div class="text-center">
-                        <button type="button" id="predict_button" class="btn btn-success">执行预测</button>
-                    </div>
-                </form>
-            </div>
-        </div>
     </div>
 
     <!-- 右侧结果面板 -->
@@ -97,6 +68,29 @@
             <div class="card-body">
                 <div id="training_status" class="alert alert-light" role="alert">
                     选择数据集和目标变量，然后点击"训练模型"按钮...
+                </div>
+                <div id="save_model_container" class="mt-4 d-none">
+                    <hr>
+                    <h5>保存模型</h5>
+                    <form id="saveModelForm" class="row g-3">
+                        <div class="col-md-12">
+                            <label for="save_model_name" class="form-label">模型名称</label>
+                            <input type="text" class="form-control" id="save_model_name" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="drug_name" class="form-label">药物名称</label>
+                            <input type="text" class="form-control" id="drug_name" placeholder="可选">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="concentration_unit" class="form-label">浓度单位</label>
+                            <input type="text" class="form-control" id="concentration_unit" placeholder="可选">
+                        </div>
+                        <div class="col-12 text-center mt-3">
+                            <button type="button" id="save_model_button" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i> 保存模型
+                            </button>
+                        </div>
+                    </form>
                 </div>
 
                 <!-- 模型评估指标 -->
@@ -153,37 +147,6 @@
                 </div>
             </div>
         </div>
-
-        <!-- 预测结果卡片 -->
-        <div class="card">
-            <div class="card-header bg-warning text-dark">
-                <h3 class="card-title">预测结果</h3>
-            </div>
-            <div class="card-body">
-                <div id="prediction_status" class="alert alert-light" role="alert">
-                    选择模型和预测数据，然后点击"执行预测"按钮...
-                </div>
-
-                <div id="prediction_results_container" class="mt-3 d-none">
-                    <h5>预览结果</h5>
-                    <div class="table-responsive">
-                        <table id="prediction_results_table" class="table table-bordered table-hover">
-                            <thead id="prediction_results_header" class="table-light">
-                                <!-- 表头将通过JavaScript动态填充 -->
-                            </thead>
-                            <tbody id="prediction_results_body">
-                                <!-- 预测结果将通过JavaScript动态填充 -->
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="mt-3">
-                        <a id="download_results_link" href="#" class="btn btn-sm btn-outline-primary d-none">
-                            下载完整结果
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 </div>
 {% endblock %}
@@ -234,7 +197,7 @@
                 success: function (response) {
                     if (response.status === 'success') {
                         $('#training_status').removeClass('alert-info alert-danger').addClass('alert-success');
-                        $('#training_status').text('模型训练成功! 模型名称: ' + response.model_name);
+                        $('#training_status').text('模型训练成功!');
                         // 显示ID列警告（如果存在）
                         if (response.results.id_warning) {
                             $('#id_warning_text').html(response.results.id_warning);
@@ -255,6 +218,8 @@
                         // 刷新模型列表
                         loadModelList();
 
+                        // 添加此行显示保存模型表单
+                        $('#save_model_container').removeClass('d-none');
                     } else {
                         $('#training_status').removeClass('alert-info alert-success').addClass('alert-danger');
                         $('#training_status').text('训练失败: ' + response.message);
@@ -267,60 +232,26 @@
             });
         });
 
-        // 预测按钮点击事件
-        $('#predict_button').click(function () {
-            const modelName = $('#model_name').val();
-            const inputData = $('#input_data').val();
-
-            if (!modelName) {
-                $('#prediction_status').removeClass('alert-light alert-success').addClass('alert-danger');
-                $('#prediction_status').text('请选择模型');
-                return;
-            }
-
-            if (!inputData) {
-                $('#prediction_status').removeClass('alert-light alert-success').addClass('alert-danger');
-                $('#prediction_status').text('请选择预测数据');
-                return;
-            }
-
-            $('#prediction_status').removeClass('alert-light alert-danger').addClass('alert-info');
-            $('#prediction_status').text('执行预测中，请稍候...');
-            $('#prediction_results_container').addClass('d-none');
-
-            $.ajax({
-                url: '{{ url_for("machine_learning.predict") }}',
-                type: 'POST',
-                data: {
-                    'model_name': modelName,
-                    'input_data': inputData
-                },
-                success: function (response) {
-                    if (response.status === 'success') {
-                        $('#prediction_status').removeClass('alert-info alert-danger').addClass('alert-success');
-                        $('#prediction_status').text('预测完成! 结果已保存为: ' + response.result_file);
-
-                        // 显示预测结果
-                        displayPredictionResults(response.data_preview);
-
-                        // 设置下载链接
-                        $('#download_results_link')
-                            .attr('href', '/machine_learning/download_result?file=' + response.result_file)
-                            .removeClass('d-none');
-
-                    } else {
-                        $('#prediction_status').removeClass('alert-info alert-success').addClass('alert-danger');
-                        $('#prediction_status').text('预测失败: ' + response.message);
+    // 添加到JavaScript部分
+    function loadModelList() {
+        $.ajax({
+            url: '{{ url_for("machine_learning.model_list") }}',
+            type: 'GET',
+            success: function (response) {
+                if (response.status === 'success') {
+                    const count = response.models.length;
+                    // 更新训练状态显示已保存模型数量
+                    if (count > 0) {
+                        $('#model_count_info').removeClass('d-none')
+                            .html(`当前系统中已有${count}个保存的机器学习模型`);
                     }
-                },
-                error: function () {
-                    $('#prediction_status').removeClass('alert-info alert-success').addClass('alert-danger');
-                    $('#prediction_status').text('预测失败: 服务器错误');
                 }
-            });
+            },
+            error: function () {
+                console.error('获取模型列表失败');
+            }
         });
-    });
-
+    }
     // 加载数据集列表
     function loadDataList() {
         $.ajax({
@@ -349,41 +280,14 @@
         });
     }
 
-    // 加载模型列表
-    function loadModelList() {
-        $.ajax({
-            url: '{{ url_for("machine_learning.model_list") }}',
-            type: 'GET',
-            success: function (response) {
-                if (response.status === 'success') {
-                    let options = '';
-                    response.models.forEach(model => {
-                        options += `<option value="${model}">${model}</option>`;
-                    });
-                    $('#model_name').html(options);
-                } else {
-                    console.error('获取模型列表失败:', response.message);
-                }
-            },
-            error: function () {
-                console.error('获取模型列表失败: 服务器错误');
-            }
-        });
-    }
-
     // 加载数据集列名
     function loadColumns() {
         const selectedData = $('#selected_data').val();
         if (!selectedData) return;
-
-        // 这里需要添加一个API端点来获取数据集的列名
-        // 暂时使用模拟数据
         $.ajax({
             url: '/data_exploration/load_data',
             type: 'GET',
-            data: {
-                file_name: selectedData
-            },
+            data: { file_name: selectedData },
             success: function (response) {
                 if (response.status === 'success') {
                     const columns = response.data.columns;
@@ -466,35 +370,40 @@
         $('#plots_container').removeClass('d-none');
     }
 
-    // 显示预测结果
-    function displayPredictionResults(results) {
-        if (!results || results.length === 0) {
-            $('#prediction_results_container').addClass('d-none');
+    // 添加保存模型按钮事件
+    $('#save_model_button').click(function() {
+        const modelName = $('#save_model_name').val();
+        const drugName = $('#drug_name').val();
+        const concentrationUnit = $('#concentration_unit').val();
+        
+        if (!modelName) {
+            alert('请输入模型名称');
             return;
         }
-
-        // 生成表头
-        let headerHtml = '<tr>';
-        const columns = Object.keys(results[0]);
-        columns.forEach(column => {
-            headerHtml += `<th>${column}</th>`;
+        
+        $.ajax({
+            url: '{{ url_for("machine_learning.save_model") }}',
+            type: 'POST',
+            data: {
+                'model_name': modelName,
+                'drug_name': drugName,
+                'concentration_unit': concentrationUnit
+            },
+            success: function(response) {
+                if (response.status === 'success') {
+                    alert('模型保存成功: ' + response.model_filename);
+                    // 更新模型列表
+                    loadModelList();
+                } else {
+                    alert('模型保存失败: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('模型保存失败: 服务器错误');
+            }
         });
-        headerHtml += '</tr>';
-        $('#prediction_results_header').html(headerHtml);
+    });
+});
 
-        // 生成结果行
-        let bodyHtml = '';
-        results.forEach(row => {
-            let rowHtml = '<tr>';
-            columns.forEach(column => {
-                rowHtml += `<td>${row[column] !== null ? row[column] : 'N/A'}</td>`;
-            });
-            rowHtml += '</tr>';
-            bodyHtml += rowHtml;
-        });
-        $('#prediction_results_body').html(bodyHtml);
-
-        $('#prediction_results_container').removeClass('d-none');
-    }
 </script>
 {% endblock %}

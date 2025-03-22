@@ -48,6 +48,10 @@ def data_list():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
+# 添加全局变量存储当前模型
+current_ml_model = None
+current_ml_metadata = None
+
 @machine_learning_bp.route('/train_model', methods=['POST'])
 @login_required
 def train_model():
@@ -91,13 +95,10 @@ def train_model():
         # 根据选择的模型类型训练模型
         model, train_results = train_model_by_type(model_type, X_train, y_train, X_test, y_test)
         
-        # 保存模型
-        model_name = f"ML_{model_type}_{os.path.splitext(selected_data)[0]}_{datetime.now().strftime('%Y%m%d%H%M%S')}.joblib"
-        model_path = os.path.join('ML_Models', model_name)
-        joblib.dump(model, model_path)
-        
-        # 保存模型元数据
-        metadata = {
+        # 存储到全局变量而不是直接保存
+        global current_ml_model, current_ml_metadata
+        current_ml_model = model
+        current_ml_metadata = {
             'model_type': model_type,
             'features': features,
             'target': target_column,
@@ -107,11 +108,7 @@ def train_model():
             'feature_importance': train_results.get('feature_importance', {})
         }
         
-        metadata_path = os.path.join('ML_Models', f"{os.path.splitext(model_name)[0]}.json")
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata, f, indent=2)
-        
-        # 处理结果中的NaN值，转换为None以便jsonify可以正确处理
+        # 处理结果中的NaN值
         def replace_nan(obj):
             if isinstance(obj, dict):
                 return {k: replace_nan(v) for k, v in obj.items()}
@@ -124,99 +121,70 @@ def train_model():
         return jsonify({
             'status': 'success',
             'message': '模型训练成功',
-            'model_name': model_name,
-            'results': replace_nan(train_results),  # 由于jsonify无法处理NaN，需要转换为None
+            'model_info': {
+                'type': model_type,
+                'features_count': len(features)
+            },
+            'results': replace_nan(train_results),
             'features': features
+        })
+    
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@machine_learning_bp.route('/save_model', methods=['POST'])
+@login_required
+def save_model():
+    """手动保存已训练的模型"""
+    try:
+        model_name = request.form.get('model_name')
+        drug_name = request.form.get('drug_name', '未指定')
+        concentration_unit = request.form.get('concentration_unit', '未指定')
+        
+        if not model_name:
+            return jsonify({'status': 'error', 'message': '请提供模型名称'})
+        
+        global current_ml_model, current_ml_metadata
+        if current_ml_model is None:
+            return jsonify({'status': 'error', 'message': '没有可保存的模型，请先训练模型'})
+        
+        # 生成文件名
+        model_filename = f"ML_{model_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}.joblib"
+        model_path = os.path.join('ML_Models', model_filename)
+        
+        # 保存模型
+        joblib.dump(current_ml_model, model_path)
+        
+        # 添加药物信息到元数据
+        metadata = current_ml_metadata.copy()
+        metadata['drug_name'] = drug_name
+        metadata['concentration_unit'] = concentration_unit
+        metadata['model_name'] = model_name
+        
+        # 保存元数据
+        metadata_path = os.path.join('ML_Models', f"{os.path.splitext(model_filename)[0]}.json")
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+            
+        return jsonify({
+            'status': 'success',
+            'message': '模型保存成功',
+            'model_filename': model_filename
         })
         
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
-
+    
 @machine_learning_bp.route('/model_list', methods=['GET'])
 @login_required
 def model_list():
-    """获取已训练的模型列表"""
+    """获取已保存模型列表"""
     try:
         if not os.path.exists('ML_Models'):
             os.makedirs('ML_Models')
-        
+            
         models = [f for f in os.listdir('ML_Models') if f.endswith('.joblib')]
         return jsonify({'status': 'success', 'models': models})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-
-@machine_learning_bp.route('/predict', methods=['POST'])
-@login_required
-def predict():
-    """使用已训练的模型进行预测"""
-    try:
-        model_name = request.form.get('model_name')
-        input_data = request.form.get('input_data') # JSON格式的输入数据或数据文件
-        
-        if not model_name:
-            return jsonify({'status': 'error', 'message': '请选择模型'})
-            
-        # 加载模型
-        model_path = os.path.join('ML_Models', model_name)
-        if not os.path.exists(model_path):
-            return jsonify({'status': 'error', 'message': '模型文件不存在'})
-            
-        model = joblib.load(model_path)
-        
-        # 加载模型元数据
-        metadata_path = os.path.join('ML_Models', f"{os.path.splitext(model_name)[0]}.json")
-        if not os.path.exists(metadata_path):
-            return jsonify({'status': 'error', 'message': '模型元数据不存在'})
-            
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
-        
-        # 解析输入数据
-        # 这里需要更完善的逻辑来处理不同形式的输入
-        if input_data:
-            try:
-                # 尝试解析JSON输入
-                input_df = pd.DataFrame(json.loads(input_data))
-            except:
-                # 可能是文件名
-                input_path = os.path.join('PKdata', input_data)
-                if os.path.exists(input_path):
-                    input_df = pd.read_csv(input_path)
-                else:
-                    return jsonify({'status': 'error', 'message': '无法解析输入数据'})
-        else:
-            return jsonify({'status': 'error', 'message': '请提供输入数据'})
-        
-        # 确保所需特征都存在
-        missing_features = [f for f in metadata['features'] if f not in input_df.columns]
-        if missing_features:
-            return jsonify({
-                'status': 'error', 
-                'message': f'输入数据缺少以下特征: {", ".join(missing_features)}'
-            })
-        
-        # 准备预测数据
-        X_pred = input_df[metadata['features']].fillna(0)
-        
-        # 进行预测
-        predictions = model.predict(X_pred)
-        
-        # 将预测结果添加到原数据中
-        input_df['predicted_' + metadata['target']] = predictions
-        
-        # 保存带预测结果的数据
-        result_filename = f"pred_{os.path.splitext(model_name)[0]}_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
-        result_path = os.path.join('ML_Models', result_filename)
-        input_df.to_csv(result_path, index=False)
-        
-        return jsonify({
-            'status': 'success',
-            'message': '预测完成',
-            'result_file': result_filename,
-            'predictions': predictions.tolist(),
-            'data_preview': input_df.head(5).to_dict('records')
-        })
-        
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 

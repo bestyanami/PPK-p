@@ -97,7 +97,17 @@
                         <input type="text" class="form-control" id="model_name" name="model_name"
                             placeholder="federated_model_1" value="">
                     </div>
-
+                    
+                    <div class="mb-3">
+                        <label for="drug_name" class="form-label">药物名称</label>
+                        <input type="text" class="form-control" id="drug_name" name="drug_name" placeholder="可选">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="concentration_unit" class="form-label">浓度单位</label>
+                        <input type="text" class="form-control" id="concentration_unit" name="concentration_unit" placeholder="可选">
+                    </div>
+                
                     <div class="text-center">
                         <button type="button" id="save_model_button" class="btn btn-success" disabled>
                             保存模型
@@ -173,44 +183,6 @@
     </div>
 </div>
 
-<!-- 添加到federated_learning.html -->
-<div class="card mb-4">
-    <div class="card-header">
-        <h5>模型应用</h5>
-    </div>
-    <div class="card-body">
-        <div class="row mb-3">
-            <div class="col-md-6">
-                <select id="model-select" class="form-control">
-                    <option value="">选择已训练模型</option>
-                </select>
-            </div>
-            <div class="col-md-6">
-                <button id="load-model-btn" class="btn btn-primary">加载模型</button>
-            </div>
-        </div>
-        
-        <!-- 单样本预测 -->
-        <div class="row mb-3 prediction-controls" style="display:none;">
-            <div class="col-12">
-                <h6>单样本预测</h6>
-                <div id="feature-inputs"></div>
-                <button id="predict-btn" class="btn btn-success mt-2">预测</button>
-                <div id="prediction-result" class="mt-2"></div>
-            </div>
-        </div>
-        
-        <!-- 批量预测 -->
-        <div class="row prediction-controls" style="display:none;">
-            <div class="col-12">
-                <h6>批量预测</h6>
-                <input type="file" id="batch-file" class="form-control mb-2" accept=".csv">
-                <button id="batch-predict-btn" class="btn btn-info">批量预测</button>
-                <div id="batch-result" class="mt-2"></div>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -318,6 +290,8 @@
         // 保存模型按钮点击事件
         $('#save_model_button').click(function () {
             const modelName = $('#model_name').val();
+            const drugName = $('#drug_name').val();
+            const concentrationUnit = $('#concentration_unit').val();
 
             if (!modelName) {
                 alert('请输入模型名称');
@@ -328,7 +302,9 @@
                 url: '{{ url_for("federated_learning.save_federated_model") }}',
                 type: 'POST',
                 data: {
-                    'model_name': modelName
+                    'model_name': modelName,
+                    'drug_name': drugName,
+                    'concentration_unit': concentrationUnit
                 },
                 success: function (response) {
                     if (response.status === 'success') {
@@ -525,236 +501,6 @@
 
         $('#evaluation_container').removeClass('d-none');
         $('#no_evaluation_message').addClass('d-none');
-    }
-    // 模型应用功能 - 页面加载时获取模型列表
-    loadModelList();
-
-    // 加载模型按钮事件
-    $('#load-model-btn').click(function() {
-        const modelFilename = $('#model-select').val();
-        if (!modelFilename) {
-            alert('请选择要加载的模型');
-            return;
-        }
-        loadSelectedModel(modelFilename);
-    });
-
-    // 单样本预测按钮事件
-    $('#predict-btn').click(function() {
-        performPrediction();
-    });
-
-    // 批量预测按钮事件
-    $('#batch-predict-btn').click(function() {
-        performBatchPrediction();
-    });
-
-    // 加载模型列表函数
-    function loadModelList() {
-        $.ajax({
-            url: '{{ url_for("federated_learning.model_list") }}',
-            type: 'GET',
-            success: function(response) {
-                if (response.status === 'success') {
-                    let options = '<option value="">选择已训练模型</option>';
-                    response.models.forEach(model => {
-                        options += `<option value="${model}">${model}</option>`;
-                    });
-                    $('#model-select').html(options);
-                } else {
-                    console.error('获取模型列表失败:', response.message);
-                }
-            },
-            error: function() {
-                console.error('获取模型列表失败: 服务器错误');
-            }
-        });
-    }
-
-    // 加载选定的模型
-    function loadSelectedModel(modelFilename) {
-        $.ajax({
-            url: '{{ url_for("federated_learning.load_model") }}',
-            type: 'POST',
-            data: {
-                'model_filename': modelFilename
-            },
-            success: function(response) {
-                if (response.status === 'success') {
-                    alert('模型加载成功!');
-                    $('.prediction-controls').show();
-                    
-                    // 加载模型后动态创建特征输入框
-                    displayFeatureInputs();
-                } else {
-                    alert('模型加载失败: ' + response.message);
-                }
-            },
-            error: function() {
-                alert('模型加载失败: 服务器错误');
-            }
-        });
-    }
-
-    // 显示特征输入框
-    function displayFeatureInputs() {
-        const featureInputs = `
-            <div class="row mb-2">
-                <div class="col-md-3">
-                    <label>时间点 (TIME)</label>
-                    <input type="number" class="form-control feature-input" data-name="TIME" step="0.1" min="0">
-                </div>
-                <div class="col-md-3">
-                    <label>浓度值 (DV)</label>
-                    <input type="number" class="form-control feature-input" data-name="DV" step="0.01" min="0">
-                </div>
-                <div class="col-md-3">
-                    <label>给药剂量 (AMT)</label>
-                    <input type="number" class="form-control feature-input" data-name="AMT" step="0.1" min="0">
-                </div>
-                <div class="col-md-3">
-                    <label>体重 (WT)</label>
-                    <input type="number" class="form-control feature-input" data-name="WT" step="0.1" min="0">
-                </div>
-            </div>
-            <div class="row mb-2">
-                <div class="col-md-3">
-                    <label>年龄 (AGE)</label>
-                    <input type="number" class="form-control feature-input" data-name="AGE" min="0">
-                </div>
-                <div class="col-md-3">
-                    <label>性别 (SEX)</label>
-                    <select class="form-control feature-input" data-name="SEX">
-                        <option value="1">男</option>
-                        <option value="0">女</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label>血清肌酐 (SCR)</label>
-                    <input type="number" class="form-control feature-input" data-name="SCR" step="0.01" min="0">
-                </div>
-                <div class="col-md-3">
-                    <label>体表面积 (BSA)</label>
-                    <input type="number" class="form-control feature-input" data-name="BSA" step="0.01" min="0">
-                </div>
-            </div>
-            <div class="row mb-2">
-                <div class="col-md-3">
-                    <label>肝酶ALT</label>
-                    <input type="number" class="form-control feature-input" data-name="ALT" min="0">
-                </div>
-                <div class="col-md-3">
-                    <label>肝酶AST</label>
-                    <input type="number" class="form-control feature-input" data-name="AST" min="0">
-                </div>
-                <div class="col-md-3">
-                    <label>事件标识 (EVID)</label>
-                    <select class="form-control feature-input" data-name="EVID">
-                        <option value="0">观测值 (0)</option>
-                        <option value="1">给药事件 (1)</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label>缺失标志 (MDV)</label>
-                    <select class="form-control feature-input" data-name="MDV">
-                        <option value="0">非缺失 (0)</option>
-                        <option value="1">缺失 (1)</option>
-                    </select>
-                </div>
-            </div>
-        `;
-        $('#feature-inputs').html(featureInputs);
-    }
-
-    // 执行单样本预测
-    function performPrediction() {
-        // 收集所有特征值
-        const featureData = {};
-        $('.feature-input').each(function() {
-            const name = $(this).data('name');
-            const value = parseFloat($(this).val()) || 0;
-            featureData[name] = value;
-        });
-        
-        $.ajax({
-            url: '{{ url_for("federated_learning.predict") }}',
-            type: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({
-                data: [featureData]
-            }),
-            success: function(response) {
-                if (response.status === 'success') {
-                    $('#prediction-result').html(`
-                        <div class="alert alert-success">
-                            <strong>预测结果:</strong> ${response.predictions[0].toFixed(4)}
-                        </div>
-                    `);
-                } else {
-                    $('#prediction-result').html(`
-                        <div class="alert alert-danger">
-                            <strong>预测失败:</strong> ${response.message}
-                        </div>
-                    `);
-                }
-            },
-            error: function() {
-                $('#prediction-result').html(`
-                    <div class="alert alert-danger">
-                        <strong>预测失败:</strong> 服务器错误
-                    </div>
-                `);
-            }
-        });
-    }
-
-    // 执行批量预测
-    function performBatchPrediction() {
-        const fileInput = document.getElementById('batch-file');
-        if (!fileInput.files || !fileInput.files[0]) {
-            alert('请选择CSV文件');
-            return;
-        }
-        
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
-        formData.append('model_filename', $('#model-select').val());  // 添加模型文件名
-        
-        $('#batch-result').html(`<div class="alert alert-info">正在处理批量预测，请稍候...</div>`);
-        
-        $.ajax({
-            url: '{{ url_for("federated_learning.batch_predict") }}',
-            type: 'POST',
-            data: formData,
-            processData: false,
-            contentType: false,
-            success: function(response) {
-                if (response.status === 'success') {
-                    $('#batch-result').html(`
-                        <div class="alert alert-success">
-                            <strong>批量预测完成!</strong><br>
-                            结果已保存为: ${response.output_file}<br>
-                            <a href="/download/${response.output_file}" class="btn btn-sm btn-primary mt-2">
-                                <i class="fas fa-download"></i> 下载结果
-                            </a>
-                        </div>
-                    `);
-                } else {
-                    $('#batch-result').html(`
-                        <div class="alert alert-danger">
-                            <strong>批量预测失败:</strong> ${response.message}
-                        </div>
-                    `);
-                }
-            },
-            error: function() {
-                $('#batch-result').html(`
-                    <div class="alert alert-danger">
-                        <strong>批量预测失败:</strong> 服务器错误
-                    </div>
-                `);
-            }
-        });
     }
 </script>
 {% endblock %}
