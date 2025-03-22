@@ -13,21 +13,26 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
-    - name: Set up Python 3.11
+    - name: Set up Python 3.10
       uses: actions/setup-python@v4
       with:
-        python-version: '3.11'
+        python-version: '3.10'
         cache: 'pip'
         
     - name: Set up R
       uses: r-lib/actions/setup-r@v2
       with:
         r-version: '4.4.2'
+        use-public-rspm: true
     
     - name: Cache apt packages
+      id: r-cache
       uses: actions/cache@v3
       with:
-        path: ~/.apt-cache
+        path: |
+          ~/.apt-cache/archives/*.deb
+          !~/.apt-cache/archives/partial/
+          !~/.apt-cache/archives/lock
         key: ${{ runner.os }}-apt-${{ hashFiles('**/test-app.yml') }}
         restore-keys: |
           ${{ runner.os }}-apt-
@@ -37,8 +42,8 @@ jobs:
         mkdir -p ~/.apt-cache/archives/partial
         sudo rm -rf /var/cache/apt/archives
         sudo ln -s ~/.apt-cache/archives /var/cache/apt/archives
-        chmod -R 777 ~/.apt-cache
-        sudo chmod 777 /var/cache/apt/archives
+        find ~/.apt-cache -type d -exec chmod 755 {} \;
+        find ~/.apt-cache -type f -exec chmod 644 {} \;
     
     - name: Cache R packages
       uses: actions/cache@v3
@@ -49,11 +54,22 @@ jobs:
           ${{ runner.os }}-R-
     
     - name: Install R dependencies
+      if: steps.r-cache.outputs.cache-hit != 'true'  # 只在缓存未命中时执行
       run: |
         mkdir -p ~/r-packages
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev libssl-dev libxml2-dev
-        R -e 'install.packages(c("shiny", "ggplot2", "dplyr", "readr", "markdown"), lib="~/r-packages", repos="https://cloud.r-project.org/")'
+        # 检查包是否已经存在，不存在才安装
+        R -e '
+        lib_path <- "~/r-packages"
+        to_install <- c("dplyr", "readr")
+        installed <- list.files(lib_path)
+        need_install <- to_install[!to_install %in% installed]
+        if(length(need_install) > 0) {
+          install.packages(need_install, lib=lib_path, repos="https://cloud.r-project.org/")
+        } else {
+          cat("所有R包已在缓存中找到，跳过安装\n")
+        }'
     
     - name: Install Python dependencies
       run: |
