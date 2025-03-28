@@ -60,7 +60,19 @@ def run_federated():
     try:
         # 获取表单数据
         data_sources = request.form.getlist('data_sources[]')
-        target_column = request.form.get('target_column')
+        target_column = request.form.get('target_column', 'DV')  # 默认使用DV
+        
+        # 如果未指定目标列但至少一个数据源包含DV列，则使用DV
+        if not target_column:
+            for source in data_sources:
+                file_path = os.path.join('PKdata', source)
+                if os.path.exists(file_path):
+                    df = pd.read_csv(file_path)
+                    if 'DV' in df.columns:
+                        target_column = 'DV'
+                        logging.info("未指定目标变量，自动使用DV作为目标变量")
+                        break
+
         num_rounds = int(request.form.get('num_rounds', 10))
         batch_size = int(request.form.get('batch_size', 32))
         local_epochs = int(request.form.get('local_epochs', 1))
@@ -103,8 +115,14 @@ def run_federated():
         
         # 保存当前会话的模型
         current_federated_model = model
-        current_federated_history = {'model': model, 'history': history, 'evaluation': evaluation}
-        
+        current_federated_history = {
+            'model': model, 
+            'history': history, 
+            'evaluation': evaluation,
+            'target': target_column,  # 添加目标变量信息
+            'feature_names': evaluation.get('feature_names', [])
+        }
+
         return jsonify({
             'status': 'success',
             'message': '联邦学习完成',
@@ -152,8 +170,9 @@ def save_federated_model():
         metadata = {
             'model_name': model_name,
             'model_type': 'federated_learning',
-            'drug_name': drug_name,  # 新增
-            'concentration_unit': concentration_unit,  # 新增
+            'drug_name': drug_name,
+            'concentration_unit': concentration_unit,
+            'target': current_federated_history.get('target', 'DV'),  # 获取目标变量信息
             'training_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'history': current_federated_history['history'],
             'evaluation': current_federated_history['evaluation'],
@@ -434,7 +453,14 @@ def run_simulated_federated_learning(data_sources, target_column, num_rounds=10,
         mse = np.mean((y_combined - y_pred) ** 2)
         history.append(float(mse))
     
-    # 评估模型 - 修复缩进(移出循环)
+    # 从联邦状态获取权重并应用
+    tff.learning.assign_weights_to_keras_model(keras_model, state.model)
+    
+    # 获取特征名称
+    feature_names = []
+    if hasattr(keras_model, 'input_names'):
+        feature_names = keras_model.input_names
+    
     evaluation = {
         'metrics': [],
         'predictions': {
@@ -486,10 +512,16 @@ def evaluate_federated_model(state, client_datasets, client_names, model_fn):
     # 从联邦状态获取权重并应用
     tff.learning.assign_weights_to_keras_model(keras_model, state.model)
     
+    # 获取特征名称
+    feature_names = []
+    if hasattr(keras_model, 'input_names'):
+        feature_names = keras_model.input_names
+    
     evaluation = {
         'metrics': [],
         'predictions': {'actual': [], 'predicted': []},
-        'privacy_metrics': privacy_metrics
+        'privacy_metrics': privacy_metrics,
+        'feature_names': feature_names  # 添加特征名称
     }
     
     # 评估每个客户端

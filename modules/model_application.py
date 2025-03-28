@@ -125,7 +125,8 @@ def load_model():
                 'metadata': {
                     'drug_name': metadata.get('drug_name', '未指定'),
                     'concentration_unit': metadata.get('concentration_unit', '未指定'),
-                    'model_type': model_type
+                    'model_type': model_type,
+                    'target': metadata.get('target', '')  # 使用模型训练时的目标变量
                 }
             }, f)
         
@@ -157,14 +158,31 @@ def predict():
         session_file = os.path.join('Predictions', f"session_{session_id}.json")
         if not os.path.exists(session_file):
             return jsonify({'status': 'error', 'message': '会话已过期，请重新加载模型'})
-        
+
         with open(session_file, 'r') as f:
             session_data = json.load(f)
-        
+
+        # 获取目标变量信息
+        target_column = session_data['metadata'].get('target', '')
+        target_variables = ['DV', 'CONC', 'DVOR']
+        if target_column and target_column not in target_variables:
+            target_variables.append(target_column)
+
         # 加载模型
         model_path = session_data['model_path']
+        feature_names = session_data.get('feature_names', [])
         model = joblib.load(model_path)
-        
+
+        # 确保所有需要的特征都存在
+        for feat in feature_names:
+            if feat not in features and feat not in target_variables:
+                features[feat] = 0
+
+        # 处理目标变量
+        for target in target_variables:
+            if target in feature_names and target not in features:
+                features[target] = 0
+
         # 处理输入特征
         input_df = pd.DataFrame([features])
         
@@ -212,12 +230,19 @@ def batch_predict():
         
         # 修正批量预测代码
         if feature_names and len(feature_names) > 0:
+            # 从元数据中获取目标变量名称
+            target_column = session_data['metadata'].get('target', '')
+            target_variables = ['DV', 'CONC', 'DVOR']
+            if target_column and target_column not in target_variables:
+                target_variables.append(target_column)
+                print(f"添加模型特定目标变量: {target_column}")
+            
             # 准备预测数据
             missing_cols = [f for f in feature_names if f not in df.columns]
             
-            # 为缺失列添加默认值（除DV等目标变量外）
+            # 为缺失列添加默认值（除目标变量外）
             for col in missing_cols:
-                if col in ['DV', 'CONC', 'DVOR']:
+                if col in target_variables:
                     # 排除目标变量
                     continue
                 else:
@@ -228,9 +253,10 @@ def batch_predict():
             # 创建预测数据集，确保包含所有模型所需特征
             X = pd.DataFrame()
             for feat in feature_names:
-                if feat in ['DV', 'CONC', 'DVOR']:
+                if feat in target_variables:
                     # 对于目标变量，添加空值列
                     X[feat] = 0
+                    print(f"处理目标变量: {feat}")
                 elif feat in df.columns:
                     # 对于数据中存在的特征
                     X[feat] = df[feat].fillna(0)

@@ -59,7 +59,15 @@ def train_model():
     try:
         # 获取表单数据
         selected_data = request.form.get('selected_data')
-        target_column = request.form.get('target_column')
+        target_column = request.form.get('target_column', 'DV')  # 默认使用DV作为目标变量
+        
+        # 如果未指定目标列但数据中存在DV列，则使用DV
+        if not target_column:
+            df = pd.read_csv(os.path.join('PKdata', selected_data))
+            if 'DV' in df.columns:
+                target_column = 'DV'
+                logging.info("未指定目标变量，自动使用DV作为目标变量")
+
         model_type = request.form.get('model_type', 'random_forest')
         test_size = float(request.form.get('test_size', 0.2))
         
@@ -160,6 +168,7 @@ def save_model():
         metadata['drug_name'] = drug_name
         metadata['concentration_unit'] = concentration_unit
         metadata['model_name'] = model_name
+        metadata['target'] = current_ml_metadata.get('target', 'DV')  # 确保目标变量被正确保存
         
         # 保存元数据
         metadata_path = os.path.join('ML_Models', f"{os.path.splitext(model_filename)[0]}.json")
