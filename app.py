@@ -2,7 +2,9 @@
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from werkzeug.utils import secure_filename
+from modules.model_application import model_application_bp
+import json
+from werkzeug.security import check_password_hash
 import os
 
 import pandas as pd
@@ -86,15 +88,28 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
+        if not username or not password:
+            flash('请输入用户名和密码。')
+            return render_template('login.html')
+        # 从JSON文件加载用户数据
+        users_file = 'users.json'
+        if not os.path.exists(users_file):
+            flash('用户配置文件不存在，请先创建用户。')
+            return render_template('login.html')
+
+        with open(users_file, 'r') as f:
+            users = json.load(f)
         
-        # 简单认证 - 生产环境中应使用更安全的方法
-        if username == "a" and password == "a":
-            user = User("admin")
+        user_data = users.get(username)
+        
+        # 验证用户和密码哈希
+        if user_data and check_password_hash(user_data.get('password_hash'), password):
+            user = User(username)
             login_user(user, remember=True)
             session.permanent = True
             
             next_page = request.args.get('next')
-            if next_page and next_page.startswith('/'):  # 确保URL是相对路径，防止重定向攻击
+            if next_page and next_page.startswith('/'):
                 return redirect(next_page)
             else:
                 return redirect(url_for('index'))
